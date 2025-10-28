@@ -5,6 +5,7 @@ import { getOrCreateGuestSessionId } from '@/utils/guestSession';
 import Dashboard from './Dashboard';
 import { Button } from '@/components/ui/button';
 
+// Resume builder with Cloud backend
 const Index = () => {
   const { user, loading } = useAuth();
   const [guestMode, setGuestMode] = useState(false);

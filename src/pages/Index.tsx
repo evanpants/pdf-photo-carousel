@@ -1,17 +1,34 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthForm } from '@/components/auth/AuthForm';
+import { Button } from '@/components/ui/button';
+import { signInAsGuest } from '@/utils/guestAuth';
+import { toast } from 'sonner';
 
 const Index = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const [guestLoading, setGuestLoading] = useState(false);
 
   useEffect(() => {
     if (!loading && user) {
       navigate('/projects');
     }
   }, [user, loading]);
+
+  const handleGuestMode = async () => {
+    setGuestLoading(true);
+    try {
+      await signInAsGuest();
+      toast.success('Welcome! You\'re in guest mode');
+      navigate('/projects');
+    } catch (error) {
+      toast.error('Failed to start guest mode');
+    } finally {
+      setGuestLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -36,6 +53,27 @@ const Index = () => {
         </div>
 
         <AuthForm />
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">Or</span>
+          </div>
+        </div>
+
+        <Button 
+          variant="outline" 
+          className="w-full" 
+          onClick={handleGuestMode}
+          disabled={guestLoading}
+        >
+          {guestLoading ? 'Starting...' : 'Continue as Guest'}
+        </Button>
+        <p className="text-xs text-center text-muted-foreground">
+          Guest mode: Try it out without signing up. Your work is saved temporarily.
+        </p>
       </div>
     </div>
   );

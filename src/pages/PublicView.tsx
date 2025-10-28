@@ -129,9 +129,18 @@ export default function PublicView() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="p-4">
-            <Document file={pdfUrl}>
-              <Page pageNumber={1} renderTextLayer={false} />
-            </Document>
+            {pdfUrl && (
+              <Document 
+                file={pdfUrl}
+                loading={<div className="p-8">Loading PDF...</div>}
+              >
+                <Page 
+                  pageNumber={1} 
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                />
+              </Document>
+            )}
           </Card>
 
           <div className="space-y-4">

@@ -54,6 +54,8 @@ export default function Editor() {
     const canvas = new FabricCanvas(canvasRef.current, {
       selection: true,
       backgroundColor: 'transparent',
+      width: 612, // Standard PDF width
+      height: 792, // Standard PDF height
     });
 
     setFabricCanvas(canvas);
@@ -205,13 +207,23 @@ export default function Editor() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 max-w-7xl mx-auto">
         <div className="lg:col-span-2">
           <Card className="p-4">
-            <div className="relative">
-              <Document file={pdfUrl} onLoadSuccess={({ numPages }) => setNumPages(numPages)}>
-                <Page pageNumber={1} renderTextLayer={false} />
-              </Document>
+            <div className="relative inline-block">
+              {pdfUrl && (
+                <Document 
+                  file={pdfUrl} 
+                  onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                  loading={<div className="p-8">Loading PDF...</div>}
+                >
+                  <Page 
+                    pageNumber={1} 
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                  />
+                </Document>
+              )}
               <canvas
                 ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full pointer-events-auto"
+                className="absolute top-0 left-0 pointer-events-auto"
                 style={{ zIndex: 10 }}
               />
             </div>

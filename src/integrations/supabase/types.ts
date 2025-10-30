@@ -124,44 +124,11 @@ export type Database = {
             referencedRelation: "projects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "regions_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "public_projects"
-            referencedColumns: ["id"]
-          },
         ]
       }
     }
     Views: {
-      public_projects: {
-        Row: {
-          created_at: string | null
-          id: string | null
-          published: boolean | null
-          slug: string | null
-          title: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string | null
-          published?: boolean | null
-          slug?: string | null
-          title?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string | null
-          published?: boolean | null
-          slug?: string | null
-          title?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       [_ in never]: never

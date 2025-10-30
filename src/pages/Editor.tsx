@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { Canvas as FabricCanvas, Rect } from 'fabric';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,6 +9,7 @@ import { ArrowLeft, Save, Eye, Globe } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { RegionManager } from '@/components/editor/RegionManager';
+import { DrawingCanvas } from '@/components/editor/DrawingCanvas';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -39,11 +39,9 @@ export default function Editor() {
   const [numPages, setNumPages] = useState<number>(0);
   const [regions, setRegions] = useState<Region[]>([]);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
-  const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pdfContainerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [pdfDimensions, setPdfDimensions] = useState({ width: 612, height: 792 });
+  const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadProject();
@@ -59,30 +57,13 @@ export default function Editor() {
         const pdfElement = pdfContainerRef.current.querySelector('.react-pdf__Page__canvas') as HTMLCanvasElement;
         if (pdfElement) {
           setPdfDimensions({
-            width: pdfElement.width,
-            height: pdfElement.height
+            width: pdfElement.offsetWidth,
+            height: pdfElement.offsetHeight
           });
         }
       }
     }, 100);
   };
-
-  useEffect(() => {
-    if (!canvasRef.current || fabricCanvas || !pdfDimensions.width) return;
-
-    const canvas = new FabricCanvas(canvasRef.current, {
-      selection: true,
-      backgroundColor: 'transparent',
-      width: pdfDimensions.width,
-      height: pdfDimensions.height,
-    });
-
-    setFabricCanvas(canvas);
-
-    return () => {
-      canvas.dispose();
-    };
-  }, [pdfDimensions]);
 
   const loadProject = async () => {
     const { data, error } = await supabase
@@ -116,38 +97,18 @@ export default function Editor() {
     if (data) setRegions(data);
   };
 
-  const handleDrawRegion = () => {
-    if (!fabricCanvas) return;
-
-    setIsDrawing(!isDrawing);
-
-    if (!isDrawing) {
-      const rect = new Rect({
-        left: 100,
-        top: 100,
-        width: 200,
-        height: 150,
-        fill: 'rgba(59, 130, 246, 0.3)',
-        stroke: 'rgba(59, 130, 246, 1)',
-        strokeWidth: 2,
-      });
-
-      fabricCanvas.add(rect);
-      fabricCanvas.setActiveObject(rect);
-      fabricCanvas.renderAll();
-    }
-  };
-
   const handleSaveRegions = async () => {
-    if (!fabricCanvas) return;
+    if (regions.length === 0) {
+      toast.error('No regions to save');
+      return;
+    }
 
-    const objects = fabricCanvas.getObjects();
-    const newRegions = objects.map((obj, index) => ({
+    const newRegions = regions.map((region, index) => ({
       project_id: projectId!,
-      x: obj.left || 0,
-      y: obj.top || 0,
-      width: obj.width || 0,
-      height: obj.height || 0,
+      x: region.x,
+      y: region.y,
+      width: region.width,
+      height: region.height,
       page_number: 1,
       order_index: index,
     }));
@@ -176,39 +137,42 @@ export default function Editor() {
 
     if (error) {
       toast.error('Failed to update project');
+      return;
+    }
+
+    // Update local state immediately
+    setProject(prev => prev ? { ...prev, published: newPublishedState } : null);
+
+    if (newPublishedState) {
+      const publicUrl = `${window.location.origin}/view/${project?.slug}`;
+      
+      // Open in new tab
+      window.open(publicUrl, '_blank');
+      
+      // Show success message with copy button
+      toast.success(
+        <div className="flex flex-col gap-2">
+          <p className="font-semibold">Project published successfully!</p>
+          <div className="flex items-center gap-2">
+            <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate">
+              {publicUrl}
+            </code>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(publicUrl);
+                toast.success('URL copied to clipboard!');
+              }}
+            >
+              Copy
+            </Button>
+          </div>
+        </div>,
+        { duration: 10000 }
+      );
     } else {
-      if (newPublishedState) {
-        const publicUrl = `${window.location.origin}/view/${project?.slug}`;
-        
-        // Open in new tab
-        window.open(publicUrl, '_blank');
-        
-        // Show success message with copy button
-        toast.success(
-          <div className="flex flex-col gap-2">
-            <p className="font-semibold">Project published successfully!</p>
-            <div className="flex items-center gap-2">
-              <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate">
-                {publicUrl}
-              </code>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(publicUrl);
-                  toast.success('URL copied to clipboard!');
-                }}
-              >
-                Copy
-              </Button>
-            </div>
-          </div>,
-          { duration: 10000 }
-        );
-      } else {
-        toast.success('Project unpublished');
-      }
-      loadProject();
+      toast.success('Project unpublished');
     }
   };
 
@@ -236,7 +200,10 @@ export default function Editor() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleDrawRegion}>
+            <Button 
+              variant={isDrawing ? "default" : "outline"} 
+              onClick={() => setIsDrawing(!isDrawing)}
+            >
               {isDrawing ? 'Stop Drawing' : 'Draw Region'}
             </Button>
             <Button variant="outline" onClick={handleSaveRegions}>
@@ -249,7 +216,7 @@ export default function Editor() {
             </Button>
             <Button onClick={handlePublish}>
               <Globe className="mr-2 h-4 w-4" />
-              {project.published ? 'Unpublish' : 'Publish'}
+              {project?.published ? 'Unpublish' : 'Publish'}
             </Button>
           </div>
         </div>
@@ -258,26 +225,31 @@ export default function Editor() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 max-w-7xl mx-auto">
         <div className="lg:col-span-2">
           <Card className="p-4">
-            <div className="relative inline-block" ref={pdfContainerRef}>
+            <div className="relative inline-block overflow-hidden" ref={pdfContainerRef}>
               {pdfUrl && (
-                <Document 
-                  file={pdfUrl} 
-                  onLoadSuccess={handlePdfLoadSuccess}
-                  loading={<div className="p-8">Loading PDF...</div>}
-                >
-                  <Page 
-                    pageNumber={1} 
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                    width={pdfDimensions.width}
-                  />
-                </Document>
+                <>
+                  <Document 
+                    file={pdfUrl} 
+                    onLoadSuccess={handlePdfLoadSuccess}
+                    loading={<div className="p-8">Loading PDF...</div>}
+                  >
+                    <Page 
+                      pageNumber={1} 
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                    />
+                  </Document>
+                  {pdfDimensions.width > 0 && (
+                    <DrawingCanvas
+                      regions={regions}
+                      onRegionsChange={setRegions}
+                      isDrawing={isDrawing}
+                      pdfWidth={pdfDimensions.width}
+                      pdfHeight={pdfDimensions.height}
+                    />
+                  )}
+                </>
               )}
-              <canvas
-                ref={canvasRef}
-                className="absolute top-0 left-0 pointer-events-auto"
-                style={{ zIndex: 10 }}
-              />
             </div>
           </Card>
         </div>

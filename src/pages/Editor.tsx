@@ -41,21 +41,40 @@ export default function Editor() {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [pdfDimensions, setPdfDimensions] = useState({ width: 612, height: 792 });
 
   useEffect(() => {
     loadProject();
     loadRegions();
   }, [projectId]);
 
+  const handlePdfLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    
+    // Get the actual rendered PDF dimensions
+    setTimeout(() => {
+      if (pdfContainerRef.current) {
+        const pdfElement = pdfContainerRef.current.querySelector('.react-pdf__Page__canvas') as HTMLCanvasElement;
+        if (pdfElement) {
+          setPdfDimensions({
+            width: pdfElement.width,
+            height: pdfElement.height
+          });
+        }
+      }
+    }, 100);
+  };
+
   useEffect(() => {
-    if (!canvasRef.current || fabricCanvas) return;
+    if (!canvasRef.current || fabricCanvas || !pdfDimensions.width) return;
 
     const canvas = new FabricCanvas(canvasRef.current, {
       selection: true,
       backgroundColor: 'transparent',
-      width: 612, // Standard PDF width
-      height: 792, // Standard PDF height
+      width: pdfDimensions.width,
+      height: pdfDimensions.height,
     });
 
     setFabricCanvas(canvas);
@@ -63,7 +82,7 @@ export default function Editor() {
     return () => {
       canvas.dispose();
     };
-  }, [canvasRef.current]);
+  }, [pdfDimensions]);
 
   const loadProject = async () => {
     const { data, error } = await supabase
@@ -148,15 +167,47 @@ export default function Editor() {
   };
 
   const handlePublish = async () => {
+    const newPublishedState = !project?.published;
+    
     const { error } = await supabase
       .from('projects')
-      .update({ published: !project?.published })
+      .update({ published: newPublishedState })
       .eq('id', projectId);
 
     if (error) {
       toast.error('Failed to update project');
     } else {
-      toast.success(project?.published ? 'Project unpublished' : 'Project published!');
+      if (newPublishedState) {
+        const publicUrl = `${window.location.origin}/view/${project?.slug}`;
+        
+        // Open in new tab
+        window.open(publicUrl, '_blank');
+        
+        // Show success message with copy button
+        toast.success(
+          <div className="flex flex-col gap-2">
+            <p className="font-semibold">Project published successfully!</p>
+            <div className="flex items-center gap-2">
+              <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate">
+                {publicUrl}
+              </code>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(publicUrl);
+                  toast.success('URL copied to clipboard!');
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+          </div>,
+          { duration: 10000 }
+        );
+      } else {
+        toast.success('Project unpublished');
+      }
       loadProject();
     }
   };
@@ -207,17 +258,18 @@ export default function Editor() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 max-w-7xl mx-auto">
         <div className="lg:col-span-2">
           <Card className="p-4">
-            <div className="relative inline-block">
+            <div className="relative inline-block" ref={pdfContainerRef}>
               {pdfUrl && (
                 <Document 
                   file={pdfUrl} 
-                  onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                  onLoadSuccess={handlePdfLoadSuccess}
                   loading={<div className="p-8">Loading PDF...</div>}
                 >
                   <Page 
                     pageNumber={1} 
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
+                    width={pdfDimensions.width}
                   />
                 </Document>
               )}

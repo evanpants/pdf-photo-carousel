@@ -32,7 +32,7 @@ interface Photo {
 }
 
 export default function PublicView() {
-  const { slug } = useParams();
+  const { slug, projectId } = useParams();
   const [project, setProject] = useState<Project | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [regions, setRegions] = useState<Region[]>([]);
@@ -41,15 +41,19 @@ export default function PublicView() {
 
   useEffect(() => {
     loadProject();
-  }, [slug]);
+  }, [slug, projectId]);
 
   const loadProject = async () => {
-    const { data: projectData } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('slug', slug)
-      .eq('published', true)
-      .single();
+    // Handle both preview (by projectId) and public view (by slug)
+    let query = supabase.from('projects').select('*');
+    
+    if (slug) {
+      query = query.eq('slug', slug).eq('published', true);
+    } else if (projectId) {
+      query = query.eq('id', projectId);
+    }
+    
+    const { data: projectData } = await query.single();
 
     if (!projectData) return;
 

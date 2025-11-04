@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 
 interface Region {
   id: string;
@@ -18,6 +19,8 @@ interface DrawingCanvasProps {
   pdfHeight: number;
 }
 
+type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
 export function DrawingCanvas({ 
   regions, 
   onRegionsChange, 
@@ -30,6 +33,9 @@ export function DrawingCanvas({
   const [tempRegion, setTempRegion] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number; regionId: string } | null>(null);
+  const [resizeHandle, setResizeHandle] = useState<{ handle: ResizeHandle; regionId: string; startX: number; startY: number; originalRegion: Region } | null>(null);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const SNAP_THRESHOLD = 10;
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!isDrawing || !containerRef.current) return;
@@ -56,14 +62,50 @@ export function DrawingCanvas({
     setTempRegion({ x, y, width, height });
   };
 
+  const applySnap = (value: number, targets: number[]) => {
+    if (!snapEnabled) return value;
+    for (const target of targets) {
+      if (Math.abs(value - target) < SNAP_THRESHOLD) {
+        return target;
+      }
+    }
+    return value;
+  };
+
+  const getSnapTargets = (excludeId?: string) => {
+    const targets = {
+      x: [0, pdfWidth],
+      y: [0, pdfHeight],
+      width: [] as number[],
+      height: [] as number[],
+    };
+    
+    regions.forEach(r => {
+      if (r.id !== excludeId) {
+        targets.x.push(r.x, r.x + r.width);
+        targets.y.push(r.y, r.y + r.height);
+        targets.width.push(r.width);
+        targets.height.push(r.height);
+      }
+    });
+    
+    return targets;
+  };
+
   const handleMouseUp = () => {
     if (tempRegion && currentRegion) {
+      const targets = getSnapTargets();
+      const snappedX = applySnap(tempRegion.x, targets.x);
+      const snappedY = applySnap(tempRegion.y, targets.y);
+      const snappedWidth = applySnap(tempRegion.width, targets.width);
+      const snappedHeight = applySnap(tempRegion.height, targets.height);
+      
       const newRegion: Region = {
         id: `temp-${Date.now()}`,
-        x: tempRegion.x,
-        y: tempRegion.y,
-        width: tempRegion.width,
-        height: tempRegion.height,
+        x: snappedX,
+        y: snappedY,
+        width: snappedWidth || tempRegion.width,
+        height: snappedHeight || tempRegion.height,
         page_number: 1,
         order_index: regions.length,
       };
@@ -86,18 +128,93 @@ export function DrawingCanvas({
     });
   };
 
+  const handleResizeStart = (e: React.MouseEvent, regionId: string, handle: ResizeHandle) => {
+    e.stopPropagation();
+    const region = regions.find(r => r.id === regionId);
+    if (!region) return;
+    
+    setSelectedId(regionId);
+    setResizeHandle({
+      handle,
+      regionId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originalRegion: { ...region }
+    });
+  };
+
+  const handleResize = (e: React.MouseEvent) => {
+    if (!resizeHandle) return;
+    
+    const deltaX = e.clientX - resizeHandle.startX;
+    const deltaY = e.clientY - resizeHandle.startY;
+    const orig = resizeHandle.originalRegion;
+    const targets = getSnapTargets(resizeHandle.regionId);
+    
+    let newRegion = { ...orig };
+    
+    switch (resizeHandle.handle) {
+      case 'nw':
+        newRegion.x = orig.x + deltaX;
+        newRegion.y = orig.y + deltaY;
+        newRegion.width = orig.width - deltaX;
+        newRegion.height = orig.height - deltaY;
+        break;
+      case 'n':
+        newRegion.y = orig.y + deltaY;
+        newRegion.height = orig.height - deltaY;
+        break;
+      case 'ne':
+        newRegion.y = orig.y + deltaY;
+        newRegion.width = orig.width + deltaX;
+        newRegion.height = orig.height - deltaY;
+        break;
+      case 'e':
+        newRegion.width = orig.width + deltaX;
+        break;
+      case 'se':
+        newRegion.width = orig.width + deltaX;
+        newRegion.height = orig.height + deltaY;
+        break;
+      case 's':
+        newRegion.height = orig.height + deltaY;
+        break;
+      case 'sw':
+        newRegion.x = orig.x + deltaX;
+        newRegion.width = orig.width - deltaX;
+        newRegion.height = orig.height + deltaY;
+        break;
+      case 'w':
+        newRegion.x = orig.x + deltaX;
+        newRegion.width = orig.width - deltaX;
+        break;
+    }
+    
+    // Apply snap
+    newRegion.x = Math.max(0, Math.min(pdfWidth - 20, applySnap(newRegion.x, targets.x)));
+    newRegion.y = Math.max(0, Math.min(pdfHeight - 20, applySnap(newRegion.y, targets.y)));
+    newRegion.width = Math.max(20, Math.min(pdfWidth - newRegion.x, newRegion.width));
+    newRegion.height = Math.max(20, Math.min(pdfHeight - newRegion.y, newRegion.height));
+    
+    const updatedRegions = regions.map(r => r.id === resizeHandle.regionId ? newRegion : r);
+    onRegionsChange(updatedRegions);
+  };
+
   const handleRegionDrag = (e: React.MouseEvent) => {
     if (!dragStart || !containerRef.current) return;
     
     const deltaX = e.clientX - dragStart.x;
     const deltaY = e.clientY - dragStart.y;
+    const targets = getSnapTargets(dragStart.regionId);
     
     const updatedRegions = regions.map(r => {
       if (r.id === dragStart.regionId) {
+        const newX = r.x + deltaX;
+        const newY = r.y + deltaY;
         return {
           ...r,
-          x: Math.max(0, Math.min(pdfWidth - r.width, r.x + deltaX)),
-          y: Math.max(0, Math.min(pdfHeight - r.height, r.y + deltaY)),
+          x: Math.max(0, Math.min(pdfWidth - r.width, applySnap(newX, targets.x))),
+          y: Math.max(0, Math.min(pdfHeight - r.height, applySnap(newY, targets.y))),
         };
       }
       return r;
@@ -109,6 +226,7 @@ export function DrawingCanvas({
 
   const handleRegionDragEnd = () => {
     setDragStart(null);
+    setResizeHandle(null);
   };
 
   const handleDeleteRegion = (regionId: string) => {
@@ -117,70 +235,110 @@ export function DrawingCanvas({
   };
 
   useEffect(() => {
-    if (dragStart) {
-      window.addEventListener('mousemove', handleRegionDrag as any);
+    if (dragStart || resizeHandle) {
+      const moveHandler = resizeHandle ? handleResize : handleRegionDrag;
+      window.addEventListener('mousemove', moveHandler as any);
       window.addEventListener('mouseup', handleRegionDragEnd);
       
       return () => {
-        window.removeEventListener('mousemove', handleRegionDrag as any);
+        window.removeEventListener('mousemove', moveHandler as any);
         window.removeEventListener('mouseup', handleRegionDragEnd);
       };
     }
-  }, [dragStart]);
+  }, [dragStart, resizeHandle]);
+
+  const renderResizeHandles = (region: Region) => {
+    if (selectedId !== region.id) return null;
+    
+    const handles: { handle: ResizeHandle; cursor: string; style: React.CSSProperties }[] = [
+      { handle: 'nw', cursor: 'nwse-resize', style: { top: -4, left: -4 } },
+      { handle: 'n', cursor: 'ns-resize', style: { top: -4, left: '50%', transform: 'translateX(-50%)' } },
+      { handle: 'ne', cursor: 'nesw-resize', style: { top: -4, right: -4 } },
+      { handle: 'e', cursor: 'ew-resize', style: { top: '50%', right: -4, transform: 'translateY(-50%)' } },
+      { handle: 'se', cursor: 'nwse-resize', style: { bottom: -4, right: -4 } },
+      { handle: 's', cursor: 'ns-resize', style: { bottom: -4, left: '50%', transform: 'translateX(-50%)' } },
+      { handle: 'sw', cursor: 'nesw-resize', style: { bottom: -4, left: -4 } },
+      { handle: 'w', cursor: 'ew-resize', style: { top: '50%', left: -4, transform: 'translateY(-50%)' } },
+    ];
+    
+    return handles.map(({ handle, cursor, style }) => (
+      <div
+        key={handle}
+        className="absolute w-2 h-2 bg-blue-500 border border-white rounded-full hover:scale-150 transition-transform"
+        style={{ ...style, cursor }}
+        onMouseDown={(e) => handleResizeStart(e, region.id, handle)}
+      />
+    ));
+  };
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0 cursor-crosshair"
-      style={{ 
-        width: pdfWidth,
-        height: pdfHeight,
-        pointerEvents: isDrawing || regions.length > 0 ? 'auto' : 'none'
-      }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-    >
-      {/* Render saved regions */}
-      {regions.map((region) => (
-        <div
-          key={region.id}
-          className={`absolute border-2 cursor-move ${
-            selectedId === region.id 
-              ? 'border-blue-500 bg-blue-500/20' 
-              : 'border-blue-400 bg-blue-400/10'
-          } hover:border-blue-500 hover:bg-blue-500/20 transition-colors`}
-          style={{
-            left: region.x,
-            top: region.y,
-            width: region.width,
-            height: region.height,
-          }}
-          onMouseDown={(e) => handleRegionMouseDown(e, region.id)}
+    <>
+      <div className="absolute top-2 right-2 z-10 flex gap-2">
+        <Button
+          size="sm"
+          variant={snapEnabled ? "default" : "outline"}
+          onClick={() => setSnapEnabled(!snapEnabled)}
         >
-          {selectedId === region.id && (
-            <button
-              onClick={() => handleDeleteRegion(region.id)}
-              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
-      
-      {/* Render temporary region while drawing */}
-      {tempRegion && (
-        <div
-          className="absolute border-2 border-blue-500 bg-blue-500/20"
-          style={{
-            left: tempRegion.x,
-            top: tempRegion.y,
-            width: tempRegion.width,
-            height: tempRegion.height,
-          }}
-        />
-      )}
-    </div>
+          Snap: {snapEnabled ? 'ON' : 'OFF'}
+        </Button>
+      </div>
+      <div
+        ref={containerRef}
+        className="absolute inset-0 cursor-crosshair"
+        style={{ 
+          width: pdfWidth,
+          height: pdfHeight,
+          pointerEvents: isDrawing || regions.length > 0 ? 'auto' : 'none'
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+      >
+        {/* Render saved regions */}
+        {regions.map((region) => (
+          <div
+            key={region.id}
+            className={`absolute border-2 ${
+              selectedId === region.id 
+                ? 'border-blue-500 bg-blue-500/20' 
+                : 'border-blue-400 bg-blue-400/10'
+            } hover:border-blue-500 hover:bg-blue-500/20 transition-colors`}
+            style={{
+              left: region.x,
+              top: region.y,
+              width: region.width,
+              height: region.height,
+              cursor: isDrawing ? 'crosshair' : 'move',
+            }}
+            onMouseDown={(e) => handleRegionMouseDown(e, region.id)}
+          >
+            {selectedId === region.id && (
+              <>
+                <button
+                  onClick={() => handleDeleteRegion(region.id)}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 z-10"
+                >
+                  ×
+                </button>
+                {renderResizeHandles(region)}
+              </>
+            )}
+          </div>
+        ))}
+        
+        {/* Render temporary region while drawing */}
+        {tempRegion && (
+          <div
+            className="absolute border-2 border-blue-500 bg-blue-500/20"
+            style={{
+              left: tempRegion.x,
+              top: tempRegion.y,
+              width: tempRegion.width,
+              height: tempRegion.height,
+            }}
+          />
+        )}
+      </div>
+    </>
   );
 }

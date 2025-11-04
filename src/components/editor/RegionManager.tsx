@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, GripVertical, MoveUp, MoveDown } from 'lucide-react';
 
 interface Region {
   id: string;
@@ -123,6 +123,30 @@ export function RegionManager({
     }
   };
 
+  const handleReorderPhoto = async (photoId: string, direction: 'up' | 'down') => {
+    const currentIndex = photos.findIndex(p => p.id === photoId);
+    if (currentIndex === -1) return;
+    
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (newIndex < 0 || newIndex >= photos.length) return;
+    
+    const reorderedPhotos = [...photos];
+    [reorderedPhotos[currentIndex], reorderedPhotos[newIndex]] = [reorderedPhotos[newIndex], reorderedPhotos[currentIndex]];
+    
+    // Update order_index for all affected photos
+    const updates = reorderedPhotos.map((photo, index) => 
+      supabase.from('photos').update({ order_index: index }).eq('id', photo.id)
+    );
+    
+    try {
+      await Promise.all(updates);
+      toast.success('Order updated');
+      loadPhotos();
+    } catch (error) {
+      toast.error('Failed to reorder photos');
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -175,33 +199,57 @@ export function RegionManager({
 
             <div className="space-y-3">
               <Label>Photos ({photos.length})</Label>
-              {photos.map((photo) => {
+              {photos.map((photo, index) => {
                 const { data: { publicUrl } } = supabase.storage
                   .from('carousel-photos')
                   .getPublicUrl(photo.image_path);
 
                 return (
                   <div key={photo.id} className="border rounded-lg p-3 space-y-2">
-                    <div className="relative aspect-video rounded overflow-hidden bg-muted">
-                      <img
-                        src={publicUrl}
-                        alt="Carousel"
-                        className="w-full h-full object-cover"
-                      />
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-2 right-2"
-                        onClick={() => handleDeletePhoto(photo.id, photo.image_path)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                    <div className="flex gap-2">
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          disabled={index === 0}
+                          onClick={() => handleReorderPhoto(photo.id, 'up')}
+                        >
+                          <MoveUp className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          disabled={index === photos.length - 1}
+                          onClick={() => handleReorderPhoto(photo.id, 'down')}
+                        >
+                          <MoveDown className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <div className="relative aspect-video rounded overflow-hidden bg-muted">
+                          <img
+                            src={publicUrl}
+                            alt="Carousel"
+                            className="w-full h-full object-cover"
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2"
+                            onClick={() => handleDeletePhoto(photo.id, photo.image_path)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Input
+                          placeholder="Add caption..."
+                          defaultValue={photo.caption || ''}
+                          onBlur={(e) => handleUpdateCaption(photo.id, e.target.value)}
+                        />
+                      </div>
                     </div>
-                    <Input
-                      placeholder="Add caption..."
-                      defaultValue={photo.caption || ''}
-                      onBlur={(e) => handleUpdateCaption(photo.id, e.target.value)}
-                    />
                   </div>
                 );
               })}

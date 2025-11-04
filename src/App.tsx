@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import ProjectsList from "./pages/ProjectsList";
 import Editor from "./pages/Editor";
+import Preview from "./pages/Preview";
 import PublicView from "./pages/PublicView";
 import NotFound from "./pages/NotFound";
 
@@ -21,7 +22,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/projects" element={<ProjectsList />} />
           <Route path="/editor/:projectId" element={<Editor />} />
-          <Route path="/preview/:projectId" element={<PublicView />} />
+          <Route path="/preview/:projectId" element={<Preview />} />
           <Route path="/view/:slug" element={<PublicView />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

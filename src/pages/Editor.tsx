@@ -4,8 +4,9 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Eye, Globe } from 'lucide-react';
+import { ArrowLeft, Save, Eye, Globe, Copy, Check } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { RegionManager } from '@/components/editor/RegionManager';
@@ -41,6 +42,8 @@ export default function Editor() {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -123,12 +126,20 @@ export default function Editor() {
       toast.error('Failed to save regions');
     } else {
       toast.success('Regions saved successfully!');
+      setHasUnsavedChanges(false);
       loadRegions();
     }
   };
 
+  // Track changes to regions
+  useEffect(() => {
+    if (project?.published) {
+      setHasUnsavedChanges(true);
+    }
+  }, [regions]);
+
   const handlePublish = async () => {
-    const newPublishedState = !project?.published;
+    const newPublishedState = hasUnsavedChanges ? true : !project?.published;
     
     const { error } = await supabase
       .from('projects')
@@ -142,38 +153,31 @@ export default function Editor() {
 
     // Update local state immediately
     setProject(prev => prev ? { ...prev, published: newPublishedState } : null);
+    setHasUnsavedChanges(false);
 
     if (newPublishedState) {
       const publicUrl = `${window.location.origin}/view/${project?.slug}`;
       
+      // Copy to clipboard automatically
+      navigator.clipboard.writeText(publicUrl);
+      setUrlCopied(true);
+      setTimeout(() => setUrlCopied(false), 2000);
+      
       // Open in new tab
       window.open(publicUrl, '_blank');
       
-      // Show success message with copy button
-      toast.success(
-        <div className="flex flex-col gap-2">
-          <p className="font-semibold">Project published successfully!</p>
-          <div className="flex items-center gap-2">
-            <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate">
-              {publicUrl}
-            </code>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard.writeText(publicUrl);
-                toast.success('URL copied to clipboard!');
-              }}
-            >
-              Copy
-            </Button>
-          </div>
-        </div>,
-        { duration: 10000 }
-      );
+      toast.success('Published! URL copied to clipboard');
     } else {
       toast.success('Project unpublished');
     }
+  };
+
+  const copyPublicUrl = () => {
+    const publicUrl = `${window.location.origin}/view/${project?.slug}`;
+    navigator.clipboard.writeText(publicUrl);
+    setUrlCopied(true);
+    setTimeout(() => setUrlCopied(false), 2000);
+    toast.success('URL copied!');
   };
 
   if (!project) {
@@ -216,16 +220,28 @@ export default function Editor() {
             </Button>
             <Button onClick={handlePublish}>
               <Globe className="mr-2 h-4 w-4" />
-              {project?.published ? 'Unpublish' : 'Publish'}
+              {project?.published && !hasUnsavedChanges ? 'Unpublish' : 'Publish'}
             </Button>
           </div>
         </div>
+        {project?.published && !hasUnsavedChanges && (
+          <div className="max-w-7xl mx-auto px-4 pb-3 flex items-center gap-2">
+            <Input
+              readOnly
+              value={`${window.location.origin}/view/${project?.slug}`}
+              className="flex-1 text-sm"
+            />
+            <Button variant="outline" size="icon" onClick={copyPublicUrl}>
+              {urlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 max-w-7xl mx-auto">
         <div className="lg:col-span-2">
           <Card className="p-4">
-            <div className="relative inline-block overflow-hidden" ref={pdfContainerRef}>
+            <div className="relative inline-block" ref={pdfContainerRef}>
               {pdfUrl && (
                 <>
                   <Document 

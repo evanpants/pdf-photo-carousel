@@ -184,22 +184,20 @@ export default function Preview() {
         </div>
       </div>
 
-      <div className="flex justify-center items-start min-h-[calc(100vh-73px)]">
-        <div className="relative w-full max-w-[210mm] mx-auto" ref={pdfContainerRef}>
+      <div className="flex justify-center items-start min-h-[calc(100vh-73px)] p-6">
+        <div className="relative inline-block border-2 border-border bg-muted/30" ref={pdfContainerRef}>
             {pdfUrl && (
               <>
                 <Document 
                   file={pdfUrl}
                   onLoadSuccess={handlePdfLoadSuccess}
                   loading={<div className="p-8">Loading PDF...</div>}
-                  className="w-full"
                 >
                   <Page 
                     pageNumber={1} 
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
                     width={Math.min(window.innerWidth - 32, 794)}
-                    className="!w-full"
                   />
                 </Document>
                 {pdfDimensions.width > 0 && (

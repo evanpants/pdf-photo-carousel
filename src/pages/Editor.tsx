@@ -268,22 +268,20 @@ export default function Editor() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 max-w-7xl mx-auto">
-        <div className="lg:col-span-2">
-          <div className="relative w-full max-w-[210mm]" ref={pdfContainerRef}>
+        <div className="lg:col-span-2 flex justify-center">
+          <div className="relative inline-block border-2 border-border bg-muted/30" ref={pdfContainerRef}>
               {pdfUrl && (
                 <>
                   <Document 
                     file={pdfUrl} 
                     onLoadSuccess={handlePdfLoadSuccess}
                     loading={<div className="p-8">Loading PDF...</div>}
-                    className="w-full"
                   >
                     <Page 
                       pageNumber={1} 
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
                       width={Math.min(window.innerWidth * 0.6, 794)}
-                      className="!w-full"
                     />
                   </Document>
                   {pdfDimensions.width > 0 && (

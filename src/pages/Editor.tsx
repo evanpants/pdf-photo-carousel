@@ -106,29 +106,58 @@ export default function Editor() {
       return;
     }
 
-    const newRegions = regions.map((region, index) => ({
-      project_id: projectId!,
-      x: region.x,
-      y: region.y,
-      width: region.width,
-      height: region.height,
-      page_number: 1,
-      order_index: index,
-    }));
+    // Get existing regions from database
+    const { data: existingRegions } = await supabase
+      .from('regions')
+      .select('*')
+      .eq('project_id', projectId);
 
-    // Delete existing regions
-    await supabase.from('regions').delete().eq('project_id', projectId);
+    const existingRegionsMap = new Map(existingRegions?.map(r => [r.id, r]) || []);
+    
+    // Separate regions into updates and inserts
+    const regionsToUpdate = regions.filter(r => !r.id.startsWith('temp-') && existingRegionsMap.has(r.id));
+    const regionsToInsert = regions.filter(r => r.id.startsWith('temp-') || !existingRegionsMap.has(r.id));
+    
+    // Update existing regions to preserve their IDs and associated photos
+    for (const region of regionsToUpdate) {
+      await supabase
+        .from('regions')
+        .update({
+          x: region.x,
+          y: region.y,
+          width: region.width,
+          height: region.height,
+          order_index: region.order_index,
+        })
+        .eq('id', region.id);
+    }
 
     // Insert new regions
-    const { error } = await supabase.from('regions').insert(newRegions);
+    if (regionsToInsert.length > 0) {
+      const newRegions = regionsToInsert.map((region, index) => ({
+        project_id: projectId!,
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: region.height,
+        page_number: 1,
+        order_index: regionsToUpdate.length + index,
+      }));
 
-    if (error) {
-      toast.error('Failed to save regions');
-    } else {
-      toast.success('Regions saved successfully!');
-      setHasUnsavedChanges(false);
-      loadRegions();
+      await supabase.from('regions').insert(newRegions);
     }
+    
+    // Delete regions that were removed
+    const currentRegionIds = regions.filter(r => !r.id.startsWith('temp-')).map(r => r.id);
+    const regionsToDelete = existingRegions?.filter(r => !currentRegionIds.includes(r.id)) || [];
+    
+    for (const region of regionsToDelete) {
+      await supabase.from('regions').delete().eq('id', region.id);
+    }
+
+    toast.success('Regions saved successfully!');
+    setHasUnsavedChanges(false);
+    loadRegions();
   };
 
   // Track changes to regions
@@ -240,19 +269,21 @@ export default function Editor() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 max-w-7xl mx-auto">
         <div className="lg:col-span-2">
-          <Card className="p-4">
-            <div className="relative inline-block" ref={pdfContainerRef}>
+          <div className="relative w-full max-w-[210mm]" ref={pdfContainerRef}>
               {pdfUrl && (
                 <>
                   <Document 
                     file={pdfUrl} 
                     onLoadSuccess={handlePdfLoadSuccess}
                     loading={<div className="p-8">Loading PDF...</div>}
+                    className="w-full"
                   >
                     <Page 
                       pageNumber={1} 
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
+                      width={Math.min(window.innerWidth * 0.6, 794)}
+                      className="!w-full"
                     />
                   </Document>
                   {pdfDimensions.width > 0 && (
@@ -266,8 +297,7 @@ export default function Editor() {
                   )}
                 </>
               )}
-            </div>
-          </Card>
+          </div>
         </div>
 
         <div className="lg:col-span-1">

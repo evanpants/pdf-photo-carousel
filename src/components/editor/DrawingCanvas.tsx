@@ -191,8 +191,28 @@ export function DrawingCanvas({
     }
     
     // Apply snap
-    newRegion.x = Math.max(0, Math.min(pdfWidth - 20, applySnap(newRegion.x, targets.x)));
-    newRegion.y = Math.max(0, Math.min(pdfHeight - 20, applySnap(newRegion.y, targets.y)));
+    newRegion.x = Math.max(0, applySnap(newRegion.x, targets.x));
+    newRegion.y = Math.max(0, applySnap(newRegion.y, targets.y));
+    
+    // Calculate right and bottom edges
+    const rightEdge = newRegion.x + newRegion.width;
+    const bottomEdge = newRegion.y + newRegion.height;
+    
+    // Apply snap to right and bottom edges
+    const snappedRight = applySnap(rightEdge, targets.x);
+    const snappedBottom = applySnap(bottomEdge, targets.y);
+    
+    // Adjust width and height based on snapped edges
+    if (snappedRight !== rightEdge) {
+      newRegion.width = snappedRight - newRegion.x;
+    }
+    if (snappedBottom !== bottomEdge) {
+      newRegion.height = snappedBottom - newRegion.y;
+    }
+    
+    // Constrain to PDF boundaries
+    newRegion.x = Math.min(pdfWidth - 20, newRegion.x);
+    newRegion.y = Math.min(pdfHeight - 20, newRegion.y);
     newRegion.width = Math.max(20, Math.min(pdfWidth - newRegion.x, newRegion.width));
     newRegion.height = Math.max(20, Math.min(pdfHeight - newRegion.y, newRegion.height));
     

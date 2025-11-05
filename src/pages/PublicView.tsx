@@ -117,26 +117,28 @@ export default function PublicView() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold mb-2">{project.title}</h1>
-          <p className="text-muted-foreground">Interactive Resume</p>
-        </div>
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="text-center py-6">
+        <h1 className="text-3xl font-bold mb-2">{project.title}</h1>
+        <p className="text-muted-foreground">Interactive Resume</p>
+      </div>
 
-        <Card className="p-4">
-          <div className="relative inline-block" ref={pdfContainerRef}>
+      <div className="flex-1 flex justify-center items-start">
+        <div className="relative w-full max-w-[210mm]" ref={pdfContainerRef}>
             {pdfUrl && (
               <>
                 <Document 
                   file={pdfUrl}
                   onLoadSuccess={handlePdfLoadSuccess}
                   loading={<div className="p-8">Loading PDF...</div>}
+                  className="w-full"
                 >
                   <Page 
                     pageNumber={1} 
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
+                    width={Math.min(window.innerWidth - 32, 794)}
+                    className="!w-full"
                   />
                 </Document>
                 {pdfDimensions.width > 0 && (
@@ -149,15 +151,14 @@ export default function PublicView() {
                 )}
               </>
             )}
-          </div>
-        </Card>
-
-        <PhotoGalleryModal
-          photos={selectedRegion ? photosByRegion[selectedRegion] || [] : []}
-          isOpen={selectedRegion !== null}
-          onClose={() => setSelectedRegion(null)}
-        />
+        </div>
       </div>
+
+      <PhotoGalleryModal
+        photos={selectedRegion ? photosByRegion[selectedRegion] || [] : []}
+        isOpen={selectedRegion !== null}
+        onClose={() => setSelectedRegion(null)}
+      />
     </div>
   );
 }

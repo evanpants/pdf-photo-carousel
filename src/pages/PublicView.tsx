@@ -39,6 +39,7 @@ export default function PublicView() {
   const [photosByRegion, setPhotosByRegion] = useState<Record<string, Photo[]>>({});
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
+  const [loading, setLoading] = useState(true);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,20 +61,26 @@ export default function PublicView() {
   };
 
   const loadProject = async () => {
-    // Handle both preview (by projectId) and public view (by slug)
-    let query = supabase.from('projects').select('*');
-    
-    if (slug) {
-      query = query.eq('slug', slug).eq('published', true);
-    } else if (projectId) {
-      query = query.eq('id', projectId);
-    }
-    
-    const { data: projectData } = await query.single();
+    try {
+      setLoading(true);
+      // Handle both preview (by projectId) and public view (by slug)
+      let query = supabase.from('projects').select('*');
+      
+      if (slug) {
+        query = query.eq('slug', slug).eq('published', true);
+      } else if (projectId) {
+        query = query.eq('id', projectId);
+      }
+      
+      const { data: projectData, error } = await query.single();
 
-    if (!projectData) return;
+      if (error || !projectData) {
+        console.error('Error loading project:', error);
+        setLoading(false);
+        return;
+      }
 
-    setProject(projectData);
+      setProject(projectData);
 
     const { data: { publicUrl } } = supabase.storage
       .from('resume-pdfs')
@@ -106,7 +113,20 @@ export default function PublicView() {
       }
       setPhotosByRegion(photosMap);
     }
+    } catch (error) {
+      console.error('Error in loadProject:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   if (!project) {
     return (

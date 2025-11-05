@@ -281,7 +281,7 @@ export default function Editor() {
                       pageNumber={1} 
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
-                      width={Math.min(window.innerWidth * 0.6, 794)}
+                      width={794}
                     />
                   </Document>
                   {pdfDimensions.width > 0 && (

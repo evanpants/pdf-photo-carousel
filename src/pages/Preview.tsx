@@ -197,7 +197,7 @@ export default function Preview() {
                     pageNumber={1} 
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
-                    width={Math.min(window.innerWidth - 32, 794)}
+                    width={794}
                   />
                 </Document>
                 {pdfDimensions.width > 0 && (

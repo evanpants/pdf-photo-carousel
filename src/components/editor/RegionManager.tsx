@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,8 @@ export function RegionManager({
 }: RegionManagerProps) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (selectedRegion) {
@@ -60,41 +62,100 @@ export function RegionManager({
     if (data) setPhotos(data);
   };
 
-  const handleUploadPhoto = async (file: File) => {
+  const handleUploadPhotos = async (files: FileList | File[]) => {
     if (!selectedRegion) {
       toast.error('Please select a region first');
       return;
     }
 
+    const fileArray = Array.from(files).slice(0, 5); // Limit to 5 files
+    if (fileArray.length === 0) return;
+
     setUploading(true);
+    let successCount = 0;
+    let failCount = 0;
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) {
+        toast.error('Not authenticated');
+        setUploading(false);
+        return;
+      }
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('carousel-photos')
-        .upload(fileName, file);
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+          failCount++;
+          continue;
+        }
 
-      if (uploadError) throw uploadError;
+        try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${user.id}/${Date.now()}-${i}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('carousel-photos')
+            .upload(fileName, file);
 
-      const { error: insertError } = await supabase
-        .from('photos')
-        .insert({
-          region_id: selectedRegion,
-          image_path: fileName,
-          order_index: photos.length,
-        });
+          if (uploadError) throw uploadError;
 
-      if (insertError) throw insertError;
+          const { error: insertError } = await supabase
+            .from('photos')
+            .insert({
+              region_id: selectedRegion,
+              image_path: fileName,
+              order_index: photos.length + successCount,
+            });
 
-      toast.success('Photo uploaded!');
-      loadPhotos();
+          if (insertError) throw insertError;
+          successCount++;
+        } catch (error) {
+          console.error('Upload error:', error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} photo${successCount > 1 ? 's' : ''} uploaded!`);
+        loadPhotos();
+      }
+      if (failCount > 0) {
+        toast.error(`${failCount} photo${failCount > 1 ? 's' : ''} failed to upload`);
+      }
     } catch (error) {
-      toast.error('Failed to upload photo');
+      console.error('Upload error:', error);
+      toast.error('Failed to upload photos');
     } finally {
       setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleUploadPhotos(files);
     }
   };
 
@@ -179,21 +240,50 @@ export function RegionManager({
         {selectedRegion && (
           <>
             <div className="space-y-2">
-              <Label htmlFor="photo-upload">Upload Photos</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="photo-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleUploadPhoto(file);
-                  }}
-                  disabled={uploading}
-                />
-                <Button size="icon" disabled={uploading}>
-                  <Upload className="h-4 w-4" />
-                </Button>
+              <Label htmlFor="photo-upload">Upload Photos (up to 5)</Label>
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+                  isDragging
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <Upload className="h-8 w-8 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      Drag and drop images here
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      or click to browse (max 5 images)
+                    </p>
+                  </div>
+                  <Input
+                    ref={fileInputRef}
+                    id="photo-upload"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (files && files.length > 0) {
+                        handleUploadPhotos(files);
+                      }
+                    }}
+                    disabled={uploading}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'Uploading...' : 'Select Files'}
+                  </Button>
+                </div>
               </div>
             </div>
 

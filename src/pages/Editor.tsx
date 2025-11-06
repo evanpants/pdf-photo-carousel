@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Eye, Globe, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Save, Eye, Globe, Copy, Check, Upload } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { RegionManager } from '@/components/editor/RegionManager';
@@ -44,7 +44,9 @@ export default function Editor() {
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [isReplacingPdf, setIsReplacingPdf] = useState(false);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProject();
@@ -209,6 +211,65 @@ export default function Editor() {
     toast.success('URL copied!');
   };
 
+  const handleReplacePdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !project) return;
+
+    if (!file.type.includes('pdf')) {
+      toast.error('Please upload a PDF file');
+      return;
+    }
+
+    setIsReplacingPdf(true);
+
+    try {
+      // Upload new PDF to storage with a unique name
+      const fileExt = 'pdf';
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `${project.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('resume-pdfs')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Delete old PDF from storage
+      const oldPath = project.pdf_path;
+      await supabase.storage
+        .from('resume-pdfs')
+        .remove([oldPath]);
+
+      // Update project with new pdf_path
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({ pdf_path: filePath })
+        .eq('id', project.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state and reload PDF
+      setProject({ ...project, pdf_path: filePath });
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('resume-pdfs')
+        .getPublicUrl(filePath);
+      
+      setPdfUrl(publicUrl);
+      
+      toast.success('PDF replaced successfully! Your regions and photos are unchanged.');
+    } catch (error) {
+      console.error('Error replacing PDF:', error);
+      toast.error('Failed to replace PDF');
+    } finally {
+      setIsReplacingPdf(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   if (!project) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -233,6 +294,21 @@ export default function Editor() {
             </div>
           </div>
           <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={handleReplacePdf}
+              className="hidden"
+            />
+            <Button 
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isReplacingPdf}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {isReplacingPdf ? 'Replacing...' : 'Replace PDF'}
+            </Button>
             <Button 
               variant={isDrawing ? "default" : "outline"} 
               onClick={() => setIsDrawing(!isDrawing)}

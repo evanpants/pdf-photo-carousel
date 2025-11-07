@@ -5,6 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { InteractiveRegions } from '@/components/public/InteractiveRegions';
 import { PhotoGalleryModal } from '@/components/public/PhotoGalleryModal';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -33,6 +35,7 @@ interface Photo {
 
 export default function PublicView() {
   const { slug, projectId } = useParams();
+  const isMobile = useIsMobile();
   const [project, setProject] = useState<Project | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [regions, setRegions] = useState<Region[]>([]);
@@ -40,11 +43,74 @@ export default function PublicView() {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const [loading, setLoading] = useState(true);
+  const [scale, setScale] = useState(1);
+  const [pdfWidth, setPdfWidth] = useState(794);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const touchStartDistance = useRef<number>(0);
+  const lastTapTime = useRef<number>(0);
 
   useEffect(() => {
     loadProject();
   }, [slug, projectId]);
+
+  // Calculate responsive PDF width
+  useEffect(() => {
+    const updatePdfWidth = () => {
+      if (typeof window !== 'undefined') {
+        const viewportWidth = window.innerWidth;
+        if (viewportWidth < 768) {
+          // Mobile: use 95% of viewport width with some padding
+          setPdfWidth(Math.min(viewportWidth - 32, 794));
+        } else if (viewportWidth < 1024) {
+          // Tablet: use 90% of viewport
+          setPdfWidth(Math.min(viewportWidth * 0.9, 794));
+        } else {
+          // Desktop: use standard size
+          setPdfWidth(794);
+        }
+      }
+    };
+
+    updatePdfWidth();
+    window.addEventListener('resize', updatePdfWidth);
+    return () => window.removeEventListener('resize', updatePdfWidth);
+  }, []);
+
+  // Touch handlers for pinch-to-zoom
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDistance.current = distance;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && touchStartDistance.current) {
+      const distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const newScale = (distance / touchStartDistance.current) * scale;
+      setScale(Math.max(0.5, Math.min(3, newScale)));
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      touchStartDistance.current = 0;
+    }
+
+    // Double-tap to zoom
+    const now = Date.now();
+    if (now - lastTapTime.current < 300) {
+      setScale(prev => prev === 1 ? 2 : 1);
+    }
+    lastTapTime.current = now;
+  };
 
   const handlePdfLoadSuccess = ({ numPages }: { numPages: number }) => {
     setTimeout(() => {
@@ -138,39 +204,57 @@ export default function PublicView() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="text-center py-6">
-        <h1 className="text-3xl font-bold mb-2">{project.title}</h1>
-        <p className="text-muted-foreground">Interactive Resume</p>
+      <div className="text-center py-4 md:py-6 px-4">
+        <h1 className="text-2xl md:text-3xl font-bold mb-2">{project.title}</h1>
+        <p className="text-sm md:text-base text-muted-foreground">
+          Interactive Resume {isMobile && '• Pinch or double-tap to zoom'}
+        </p>
       </div>
 
-      <div className="flex-1 flex justify-center items-start p-6">
-        <div className="relative inline-block border-2 border-border bg-muted/30" ref={pdfContainerRef}>
-            {pdfUrl && (
-              <>
-                <Document 
-                  file={pdfUrl}
-                  onLoadSuccess={handlePdfLoadSuccess}
-                  loading={<div className="p-8">Loading PDF...</div>}
-                >
-                  <Page 
-                    pageNumber={1} 
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                    width={794}
-                  />
-                </Document>
-                {pdfDimensions.width > 0 && (
-                  <InteractiveRegions
-                    regions={regions}
-                    pdfWidth={pdfDimensions.width}
-                    pdfHeight={pdfDimensions.height}
-                    onRegionClick={setSelectedRegion}
-                  />
-                )}
-              </>
-            )}
+      <ScrollArea className="flex-1">
+        <div 
+          ref={scrollContainerRef}
+          className="flex justify-center items-start p-2 md:p-6 min-h-full"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div 
+            className="relative inline-block border-2 border-border bg-muted/30 touch-pan-x touch-pan-y" 
+            ref={pdfContainerRef}
+            style={{
+              transform: `scale(${scale})`,
+              transformOrigin: 'top center',
+              transition: 'transform 0.2s ease-out',
+            }}
+          >
+              {pdfUrl && (
+                <>
+                  <Document 
+                    file={pdfUrl}
+                    onLoadSuccess={handlePdfLoadSuccess}
+                    loading={<div className="p-8">Loading PDF...</div>}
+                  >
+                    <Page 
+                      pageNumber={1} 
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                      width={pdfWidth}
+                    />
+                  </Document>
+                  {pdfDimensions.width > 0 && (
+                    <InteractiveRegions
+                      regions={regions}
+                      pdfWidth={pdfDimensions.width}
+                      pdfHeight={pdfDimensions.height}
+                      onRegionClick={setSelectedRegion}
+                    />
+                  )}
+                </>
+              )}
+          </div>
         </div>
-      </div>
+      </ScrollArea>
 
       <PhotoGalleryModal
         photos={selectedRegion ? photosByRegion[selectedRegion] || [] : []}

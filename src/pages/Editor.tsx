@@ -11,6 +11,8 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { RegionManager } from '@/components/editor/RegionManager';
 import { DrawingCanvas } from '@/components/editor/DrawingCanvas';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -35,6 +37,7 @@ interface Region {
 export default function Editor() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [project, setProject] = useState<Project | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [numPages, setNumPages] = useState<number>(0);
@@ -45,6 +48,7 @@ export default function Editor() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
   const [isReplacingPdf, setIsReplacingPdf] = useState(false);
+  const [pdfWidth, setPdfWidth] = useState(794);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,6 +56,29 @@ export default function Editor() {
     loadProject();
     loadRegions();
   }, [projectId]);
+
+  // Calculate responsive PDF width
+  useEffect(() => {
+    const updatePdfWidth = () => {
+      if (typeof window !== 'undefined') {
+        const viewportWidth = window.innerWidth;
+        if (viewportWidth < 768) {
+          // Mobile: use 95% of viewport width with some padding
+          setPdfWidth(Math.min(viewportWidth - 32, 794));
+        } else if (viewportWidth < 1024) {
+          // Tablet: fit within container
+          setPdfWidth(Math.min(viewportWidth * 0.55, 794));
+        } else {
+          // Desktop: use standard size
+          setPdfWidth(794);
+        }
+      }
+    };
+
+    updatePdfWidth();
+    window.addEventListener('resize', updatePdfWidth);
+    return () => window.removeEventListener('resize', updatePdfWidth);
+  }, []);
 
   const handlePdfLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
@@ -279,110 +306,131 @@ export default function Editor() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-card p-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/projects')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold">{project.title}</h1>
-              <p className="text-sm text-muted-foreground">
-                {project.published ? 'Published' : 'Draft'}
-              </p>
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="border-b bg-card p-2 md:p-4 shrink-0">
+        <div className="max-w-7xl mx-auto flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 md:gap-4 min-w-0">
+              <Button variant="ghost" size="icon" onClick={() => navigate('/projects')} className="shrink-0">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div className="min-w-0">
+                <h1 className="text-lg md:text-xl font-bold truncate">{project.title}</h1>
+                <p className="text-xs md:text-sm text-muted-foreground">
+                  {project.published ? 'Published' : 'Draft'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-1 md:gap-2 shrink-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                onChange={handleReplacePdf}
+                className="hidden"
+              />
+              {!isMobile && (
+                <Button 
+                  variant="outline"
+                  size={isMobile ? "sm" : "default"}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isReplacingPdf}
+                >
+                  <Upload className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">{isReplacingPdf ? 'Replacing...' : 'Replace PDF'}</span>
+                </Button>
+              )}
+              <Button 
+                variant={isDrawing ? "default" : "outline"}
+                size={isMobile ? "sm" : "default"}
+                onClick={() => setIsDrawing(!isDrawing)}
+              >
+                <span className="text-xs md:text-sm">{isDrawing ? 'Stop' : 'Draw'}</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size={isMobile ? "sm" : "default"}
+                onClick={handleSaveRegions}
+              >
+                <Save className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Save</span>
+              </Button>
+              {!isMobile && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => navigate(`/preview/${project.id}`)}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview
+                </Button>
+              )}
+              <Button size={isMobile ? "sm" : "default"} onClick={handlePublish}>
+                <Globe className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">
+                  {project?.published && !hasUnsavedChanges ? 'Unpublish' : 'Publish'}
+                </span>
+              </Button>
             </div>
           </div>
-          <div className="flex gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              onChange={handleReplacePdf}
-              className="hidden"
-            />
-            <Button 
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isReplacingPdf}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              {isReplacingPdf ? 'Replacing...' : 'Replace PDF'}
-            </Button>
-            <Button 
-              variant={isDrawing ? "default" : "outline"} 
-              onClick={() => setIsDrawing(!isDrawing)}
-            >
-              {isDrawing ? 'Stop Drawing' : 'Draw Region'}
-            </Button>
-            <Button variant="outline" onClick={handleSaveRegions}>
-              <Save className="mr-2 h-4 w-4" />
-              Save Regions
-            </Button>
-            <Button variant="outline" onClick={() => navigate(`/preview/${project.id}`)}>
-              <Eye className="mr-2 h-4 w-4" />
-              Preview
-            </Button>
-            <Button onClick={handlePublish}>
-              <Globe className="mr-2 h-4 w-4" />
-              {project?.published && !hasUnsavedChanges ? 'Unpublish' : 'Publish'}
-            </Button>
-          </div>
+          {project?.published && !hasUnsavedChanges && (
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={`${window.location.origin}/view/${project?.slug}`}
+                className="flex-1 text-xs md:text-sm"
+              />
+              <Button variant="outline" size="icon" onClick={copyPublicUrl}>
+                {urlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          )}
         </div>
-        {project?.published && !hasUnsavedChanges && (
-          <div className="max-w-7xl mx-auto px-4 pb-3 flex items-center gap-2">
-            <Input
-              readOnly
-              value={`${window.location.origin}/view/${project?.slug}`}
-              className="flex-1 text-sm"
-            />
-            <Button variant="outline" size="icon" onClick={copyPublicUrl}>
-              {urlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 max-w-7xl mx-auto">
-        <div className="lg:col-span-2 flex justify-center">
-          <div className="relative inline-block border-2 border-border bg-muted/30" ref={pdfContainerRef}>
-              {pdfUrl && (
-                <>
-                  <Document 
-                    file={pdfUrl} 
-                    onLoadSuccess={handlePdfLoadSuccess}
-                    loading={<div className="p-8">Loading PDF...</div>}
-                  >
-                    <Page 
-                      pageNumber={1} 
-                      renderTextLayer={false}
-                      renderAnnotationLayer={false}
-                      width={794}
-                    />
-                  </Document>
-                  {pdfDimensions.width > 0 && (
-                    <DrawingCanvas
-                      regions={regions}
-                      onRegionsChange={setRegions}
-                      isDrawing={isDrawing}
-                      pdfWidth={pdfDimensions.width}
-                      pdfHeight={pdfDimensions.height}
-                    />
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 p-2 md:p-6 max-w-7xl mx-auto">
+            <div className="lg:col-span-2 flex justify-center">
+              <div className="relative inline-block border-2 border-border bg-muted/30" ref={pdfContainerRef}>
+                  {pdfUrl && (
+                    <>
+                      <Document 
+                        file={pdfUrl} 
+                        onLoadSuccess={handlePdfLoadSuccess}
+                        loading={<div className="p-8">Loading PDF...</div>}
+                      >
+                        <Page 
+                          pageNumber={1} 
+                          renderTextLayer={false}
+                          renderAnnotationLayer={false}
+                          width={pdfWidth}
+                        />
+                      </Document>
+                      {pdfDimensions.width > 0 && (
+                        <DrawingCanvas
+                          regions={regions}
+                          onRegionsChange={setRegions}
+                          isDrawing={isDrawing}
+                          pdfWidth={pdfDimensions.width}
+                          pdfHeight={pdfDimensions.height}
+                        />
+                      )}
+                    </>
                   )}
-                </>
-              )}
-          </div>
-        </div>
+              </div>
+            </div>
 
-        <div className="lg:col-span-1">
-          <RegionManager
-            projectId={projectId!}
-            regions={regions}
-            selectedRegion={selectedRegion}
-            onSelectRegion={setSelectedRegion}
-            onRegionsChange={loadRegions}
-          />
-        </div>
+            <div className="lg:col-span-1">
+              <RegionManager
+                projectId={projectId!}
+                regions={regions}
+                selectedRegion={selectedRegion}
+                onSelectRegion={setSelectedRegion}
+                onRegionsChange={loadRegions}
+              />
+            </div>
+          </div>
+        </ScrollArea>
       </div>
     </div>
   );

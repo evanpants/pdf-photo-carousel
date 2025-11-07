@@ -61,17 +61,30 @@ export default function Preview() {
     loadProject();
   }, [projectId]);
 
-  // Calculate responsive PDF width
+  // Calculate responsive PDF width and update dimensions
   useEffect(() => {
     const updatePdfWidth = () => {
       if (typeof window !== 'undefined') {
         const viewportWidth = window.innerWidth;
+        let newWidth = 794;
+        
         if (viewportWidth < 768) {
-          setPdfWidth(Math.min(viewportWidth - 32, 794));
+          newWidth = Math.min(viewportWidth - 32, 794);
         } else if (viewportWidth < 1024) {
-          setPdfWidth(Math.min(viewportWidth * 0.9, 794));
+          newWidth = Math.min(viewportWidth * 0.9, 794);
         } else {
-          setPdfWidth(794);
+          newWidth = 794;
+        }
+        
+        setPdfWidth(newWidth);
+        
+        // Update pdfDimensions to match new width
+        if (pdfDimensions.height > 0 && pdfDimensions.width > 0) {
+          const aspectRatio = pdfDimensions.height / pdfDimensions.width;
+          setPdfDimensions({
+            width: newWidth,
+            height: newWidth * aspectRatio
+          });
         }
       }
     };
@@ -79,7 +92,7 @@ export default function Preview() {
     updatePdfWidth();
     window.addEventListener('resize', updatePdfWidth);
     return () => window.removeEventListener('resize', updatePdfWidth);
-  }, []);
+  }, [pdfDimensions.width, pdfDimensions.height]);
 
   // Touch handlers for pinch-to-zoom
   const handleTouchStart = (e: React.TouchEvent) => {

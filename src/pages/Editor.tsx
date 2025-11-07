@@ -58,20 +58,31 @@ export default function Editor() {
     loadRegions();
   }, [projectId]);
 
-  // Calculate responsive PDF width
+  // Calculate responsive PDF width and update dimensions
   useEffect(() => {
     const updatePdfWidth = () => {
       if (typeof window !== 'undefined') {
         const viewportWidth = window.innerWidth;
+        let newWidth = 794;
+        
         if (viewportWidth < 768) {
-          // Mobile: use 95% of viewport width with some padding
-          setPdfWidth(Math.min(viewportWidth - 32, 794));
+          newWidth = Math.min(viewportWidth - 32, 794);
         } else if (viewportWidth < 1024) {
-          // Tablet: fit within container
-          setPdfWidth(Math.min(viewportWidth * 0.55, 794));
+          newWidth = Math.min(viewportWidth * 0.55, 794);
         } else {
-          // Desktop: use standard size
-          setPdfWidth(794);
+          newWidth = 794;
+        }
+        
+        setPdfWidth(newWidth);
+        
+        // Update pdfDimensions immediately to match new width
+        // Height will be proportional based on PDF aspect ratio
+        if (pdfDimensions.height > 0 && pdfDimensions.width > 0) {
+          const aspectRatio = pdfDimensions.height / pdfDimensions.width;
+          setPdfDimensions({
+            width: newWidth,
+            height: newWidth * aspectRatio
+          });
         }
       }
     };
@@ -79,7 +90,7 @@ export default function Editor() {
     updatePdfWidth();
     window.addEventListener('resize', updatePdfWidth);
     return () => window.removeEventListener('resize', updatePdfWidth);
-  }, []);
+  }, [pdfDimensions.width, pdfDimensions.height]);
 
   const handlePdfLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);

@@ -17,6 +17,7 @@ interface DrawingCanvasProps {
   isDrawing: boolean;
   pdfWidth: number;
   pdfHeight: number;
+  originalPdfWidth?: number; // Original PDF width for coordinate scaling (default 794)
 }
 
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
@@ -26,7 +27,8 @@ export function DrawingCanvas({
   onRegionsChange, 
   isDrawing,
   pdfWidth,
-  pdfHeight
+  pdfHeight,
+  originalPdfWidth = 794
 }: DrawingCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentRegion, setCurrentRegion] = useState<{ startX: number; startY: number } | null>(null);
@@ -36,6 +38,10 @@ export function DrawingCanvas({
   const [resizeHandle, setResizeHandle] = useState<{ handle: ResizeHandle; regionId: string; startX: number; startY: number; originalRegion: Region } | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const SNAP_THRESHOLD = 10;
+  
+  // Scale factor: convert display coordinates to stored coordinates (794px base)
+  const displayToStored = originalPdfWidth / pdfWidth;
+  const storedToDisplay = pdfWidth / originalPdfWidth;
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!isDrawing || !containerRef.current) return;
@@ -100,12 +106,13 @@ export function DrawingCanvas({
       const snappedWidth = applySnap(tempRegion.width, targets.width);
       const snappedHeight = applySnap(tempRegion.height, targets.height);
       
+      // Convert display coordinates to stored coordinates (794px base)
       const newRegion: Region = {
         id: `temp-${Date.now()}`,
-        x: snappedX,
-        y: snappedY,
-        width: snappedWidth || tempRegion.width,
-        height: snappedHeight || tempRegion.height,
+        x: snappedX * displayToStored,
+        y: snappedY * displayToStored,
+        width: (snappedWidth || tempRegion.width) * displayToStored,
+        height: (snappedHeight || tempRegion.height) * displayToStored,
         page_number: 1,
         order_index: regions.length,
       };
@@ -146,8 +153,8 @@ export function DrawingCanvas({
   const handleResize = (e: React.MouseEvent) => {
     if (!resizeHandle) return;
     
-    const deltaX = e.clientX - resizeHandle.startX;
-    const deltaY = e.clientY - resizeHandle.startY;
+    const deltaX = (e.clientX - resizeHandle.startX) * displayToStored;
+    const deltaY = (e.clientY - resizeHandle.startY) * displayToStored;
     const orig = resizeHandle.originalRegion;
     const targets = getSnapTargets(resizeHandle.regionId);
     
@@ -190,31 +197,33 @@ export function DrawingCanvas({
         break;
     }
     
-    // Apply snap
-    newRegion.x = Math.max(0, applySnap(newRegion.x, targets.x));
-    newRegion.y = Math.max(0, applySnap(newRegion.y, targets.y));
+    // Apply snap in display coordinates
+    const displayX = newRegion.x * storedToDisplay;
+    const displayY = newRegion.y * storedToDisplay;
+    newRegion.x = Math.max(0, applySnap(displayX, targets.x) * displayToStored);
+    newRegion.y = Math.max(0, applySnap(displayY, targets.y) * displayToStored);
     
-    // Calculate right and bottom edges
-    const rightEdge = newRegion.x + newRegion.width;
-    const bottomEdge = newRegion.y + newRegion.height;
+    // Calculate right and bottom edges in display coordinates
+    const rightEdge = (newRegion.x + newRegion.width) * storedToDisplay;
+    const bottomEdge = (newRegion.y + newRegion.height) * storedToDisplay;
     
     // Apply snap to right and bottom edges
     const snappedRight = applySnap(rightEdge, targets.x);
     const snappedBottom = applySnap(bottomEdge, targets.y);
     
-    // Adjust width and height based on snapped edges
+    // Adjust width and height based on snapped edges (convert back to stored)
     if (snappedRight !== rightEdge) {
-      newRegion.width = snappedRight - newRegion.x;
+      newRegion.width = snappedRight * displayToStored - newRegion.x;
     }
     if (snappedBottom !== bottomEdge) {
-      newRegion.height = snappedBottom - newRegion.y;
+      newRegion.height = snappedBottom * displayToStored - newRegion.y;
     }
     
-    // Constrain to PDF boundaries
-    newRegion.x = Math.min(pdfWidth - 20, newRegion.x);
-    newRegion.y = Math.min(pdfHeight - 20, newRegion.y);
-    newRegion.width = Math.max(20, Math.min(pdfWidth - newRegion.x, newRegion.width));
-    newRegion.height = Math.max(20, Math.min(pdfHeight - newRegion.y, newRegion.height));
+    // Constrain to PDF boundaries (in stored coordinates)
+    newRegion.x = Math.min(originalPdfWidth - 20 * displayToStored, newRegion.x);
+    newRegion.y = Math.min(originalPdfWidth * (pdfHeight / pdfWidth) - 20 * displayToStored, newRegion.y);
+    newRegion.width = Math.max(20 * displayToStored, Math.min(originalPdfWidth - newRegion.x, newRegion.width));
+    newRegion.height = Math.max(20 * displayToStored, Math.min(originalPdfWidth * (pdfHeight / pdfWidth) - newRegion.y, newRegion.height));
     
     const updatedRegions = regions.map(r => r.id === resizeHandle.regionId ? newRegion : r);
     onRegionsChange(updatedRegions);
@@ -223,18 +232,20 @@ export function DrawingCanvas({
   const handleRegionDrag = (e: React.MouseEvent) => {
     if (!dragStart || !containerRef.current) return;
     
-    const deltaX = e.clientX - dragStart.x;
-    const deltaY = e.clientY - dragStart.y;
+    const deltaX = (e.clientX - dragStart.x) * displayToStored;
+    const deltaY = (e.clientY - dragStart.y) * displayToStored;
     const targets = getSnapTargets(dragStart.regionId);
     
     const updatedRegions = regions.map(r => {
       if (r.id === dragStart.regionId) {
         const newX = r.x + deltaX;
         const newY = r.y + deltaY;
+        const displayNewX = newX * storedToDisplay;
+        const displayNewY = newY * storedToDisplay;
         return {
           ...r,
-          x: Math.max(0, Math.min(pdfWidth - r.width, applySnap(newX, targets.x))),
-          y: Math.max(0, Math.min(pdfHeight - r.height, applySnap(newY, targets.y))),
+          x: Math.max(0, Math.min(originalPdfWidth - r.width, applySnap(displayNewX, targets.x) * displayToStored)),
+          y: Math.max(0, Math.min(originalPdfWidth * (pdfHeight / pdfWidth) - r.height, applySnap(displayNewY, targets.y) * displayToStored)),
         };
       }
       return r;
@@ -315,36 +326,44 @@ export function DrawingCanvas({
         onMouseUp={handleMouseUp}
       >
         {/* Render saved regions */}
-        {regions.map((region) => (
-          <div
-            key={region.id}
-            className={`absolute border-2 ${
-              selectedId === region.id 
-                ? 'border-blue-500 bg-blue-500/20' 
-                : 'border-blue-400 bg-blue-400/10'
-            } hover:border-blue-500 hover:bg-blue-500/20 transition-colors`}
-            style={{
-              left: region.x,
-              top: region.y,
-              width: region.width,
-              height: region.height,
-              cursor: isDrawing ? 'crosshair' : 'move',
-            }}
-            onMouseDown={(e) => handleRegionMouseDown(e, region.id)}
-          >
-            {selectedId === region.id && (
-              <>
-                <button
-                  onClick={() => handleDeleteRegion(region.id)}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 z-10"
-                >
-                  ×
-                </button>
-                {renderResizeHandles(region)}
-              </>
-            )}
-          </div>
-        ))}
+        {regions.map((region) => {
+          // Scale stored coordinates to display coordinates
+          const displayX = region.x * storedToDisplay;
+          const displayY = region.y * storedToDisplay;
+          const displayWidth = region.width * storedToDisplay;
+          const displayHeight = region.height * storedToDisplay;
+          
+          return (
+            <div
+              key={region.id}
+              className={`absolute border-2 ${
+                selectedId === region.id 
+                  ? 'border-blue-500 bg-blue-500/20' 
+                  : 'border-blue-400 bg-blue-400/10'
+              } hover:border-blue-500 hover:bg-blue-500/20 transition-colors`}
+              style={{
+                left: displayX,
+                top: displayY,
+                width: displayWidth,
+                height: displayHeight,
+                cursor: isDrawing ? 'crosshair' : 'move',
+              }}
+              onMouseDown={(e) => handleRegionMouseDown(e, region.id)}
+            >
+              {selectedId === region.id && (
+                <>
+                  <button
+                    onClick={() => handleDeleteRegion(region.id)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 z-10"
+                  >
+                    ×
+                  </button>
+                  {renderResizeHandles(region)}
+                </>
+              )}
+            </div>
+          );
+        })}
         
         {/* Render temporary region while drawing */}
         {tempRegion && (

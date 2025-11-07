@@ -13,6 +13,7 @@ import { RegionManager } from '@/components/editor/RegionManager';
 import { DrawingCanvas } from '@/components/editor/DrawingCanvas';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { MobileNavMenu } from '@/components/editor/MobileNavMenu';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -329,47 +330,54 @@ export default function Editor() {
                 onChange={handleReplacePdf}
                 className="hidden"
               />
-              {!isMobile && (
-                <Button 
-                  variant="outline"
-                  size={isMobile ? "sm" : "default"}
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isReplacingPdf}
-                >
-                  <Upload className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">{isReplacingPdf ? 'Replacing...' : 'Replace PDF'}</span>
-                </Button>
+              {isMobile ? (
+                <MobileNavMenu
+                  isDrawing={isDrawing}
+                  onToggleDrawing={() => setIsDrawing(!isDrawing)}
+                  onSaveRegions={handleSaveRegions}
+                  onPreview={() => navigate(`/preview/${project.id}`)}
+                  onPublish={handlePublish}
+                  onReplacePdf={() => fileInputRef.current?.click()}
+                  published={project.published}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  isReplacingPdf={isReplacingPdf}
+                />
+              ) : (
+                <>
+                  <Button 
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isReplacingPdf}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {isReplacingPdf ? 'Replacing...' : 'Replace PDF'}
+                  </Button>
+                  <Button 
+                    variant={isDrawing ? "default" : "outline"}
+                    onClick={() => setIsDrawing(!isDrawing)}
+                  >
+                    {isDrawing ? 'Stop Drawing' : 'Draw Region'}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleSaveRegions}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Save
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => navigate(`/preview/${project.id}`)}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Preview
+                  </Button>
+                  <Button onClick={handlePublish}>
+                    <Globe className="mr-2 h-4 w-4" />
+                    {project?.published && !hasUnsavedChanges ? 'Unpublish' : 'Publish'}
+                  </Button>
+                </>
               )}
-              <Button 
-                variant={isDrawing ? "default" : "outline"}
-                size={isMobile ? "sm" : "default"}
-                onClick={() => setIsDrawing(!isDrawing)}
-              >
-                <span className="text-xs md:text-sm">{isDrawing ? 'Stop' : 'Draw'}</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                size={isMobile ? "sm" : "default"}
-                onClick={handleSaveRegions}
-              >
-                <Save className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">Save</span>
-              </Button>
-              {!isMobile && (
-                <Button 
-                  variant="outline" 
-                  onClick={() => navigate(`/preview/${project.id}`)}
-                >
-                  <Eye className="mr-2 h-4 w-4" />
-                  Preview
-                </Button>
-              )}
-              <Button size={isMobile ? "sm" : "default"} onClick={handlePublish}>
-                <Globe className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">
-                  {project?.published && !hasUnsavedChanges ? 'Unpublish' : 'Publish'}
-                </span>
-              </Button>
             </div>
           </div>
           {project?.published && !hasUnsavedChanges && (
@@ -413,6 +421,7 @@ export default function Editor() {
                           isDrawing={isDrawing}
                           pdfWidth={pdfDimensions.width}
                           pdfHeight={pdfDimensions.height}
+                          originalPdfWidth={794}
                         />
                       )}
                     </>

@@ -248,6 +248,7 @@ export default function PublicView() {
                       pdfWidth={pdfDimensions.width}
                       pdfHeight={pdfDimensions.height}
                       onRegionClick={setSelectedRegion}
+                      originalPdfWidth={794}
                     />
                   )}
                 </>

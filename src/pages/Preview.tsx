@@ -286,6 +286,7 @@ export default function Preview() {
                       pdfWidth={pdfDimensions.width}
                       pdfHeight={pdfDimensions.height}
                       onRegionClick={setSelectedRegion}
+                      originalPdfWidth={794}
                     />
                   )}
                 </>

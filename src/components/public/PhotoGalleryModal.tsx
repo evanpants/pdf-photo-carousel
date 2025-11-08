@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +17,8 @@ interface PhotoGalleryModalProps {
 
 export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
 
   useEffect(() => {
     if (!isOpen) {
@@ -41,6 +43,25 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose, photos.length]);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current - touchEndX.current > 75) {
+      // Swipe left - next photo
+      setCurrentIndex((prev) => (prev + 1) % photos.length);
+    }
+    if (touchEndX.current - touchStartX.current > 75) {
+      // Swipe right - previous photo
+      setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    }
+  };
+
   if (photos.length === 0) return null;
 
   const currentPhoto = photos[currentIndex];
@@ -50,16 +71,22 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden">
+      <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[90vh] p-0 overflow-hidden [&>button]:hidden">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 z-50 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          className="absolute right-2 top-2 md:right-4 md:top-4 z-50 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 bg-background/80 p-1"
+          aria-label="Close"
         >
           <X className="h-6 w-6" />
         </button>
         
-        <div className="flex flex-col h-full">
-          <div className="flex-1 flex items-center justify-center bg-muted p-8">
+        <div 
+          className="flex flex-col h-full"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div className="flex-1 flex items-center justify-center bg-muted p-4 md:p-8">
             <img
               src={publicUrl}
               alt={currentPhoto.caption || 'Gallery image'}

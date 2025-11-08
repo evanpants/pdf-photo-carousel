@@ -45,10 +45,13 @@ export default function PublicView() {
   const [loading, setLoading] = useState(true);
   const [scale, setScale] = useState(1);
   const [pdfWidth, setPdfWidth] = useState(794);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const touchStartDistance = useRef<number>(0);
+  const touchStartPan = useRef({ x: 0, y: 0 });
   const lastTapTime = useRef<number>(0);
+  const isPinching = useRef(false);
 
   useEffect(() => {
     loadProject();
@@ -87,39 +90,58 @@ export default function PublicView() {
     return () => window.removeEventListener('resize', updatePdfWidth);
   }, [pdfDimensions.width, pdfDimensions.height]);
 
-  // Touch handlers for pinch-to-zoom
+  // Touch handlers for pinch-to-zoom and pan
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
+      isPinching.current = true;
       const distance = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
       touchStartDistance.current = distance;
+    } else if (e.touches.length === 1 && scale > 1) {
+      touchStartPan.current = {
+        x: e.touches[0].clientX - panOffset.x,
+        y: e.touches[0].clientY - panOffset.y
+      };
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2 && touchStartDistance.current) {
+      isPinching.current = true;
       const distance = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
       const newScale = (distance / touchStartDistance.current) * scale;
-      setScale(Math.max(0.5, Math.min(3, newScale)));
+      const clampedScale = Math.max(0.5, Math.min(3, newScale));
+      setScale(clampedScale);
+      touchStartDistance.current = distance;
+    } else if (e.touches.length === 1 && scale > 1 && !isPinching.current) {
+      setPanOffset({
+        x: e.touches[0].clientX - touchStartPan.current.x,
+        y: e.touches[0].clientY - touchStartPan.current.y
+      });
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length < 2) {
+      isPinching.current = false;
       touchStartDistance.current = 0;
     }
 
     // Double-tap to zoom
-    const now = Date.now();
-    if (now - lastTapTime.current < 300) {
-      setScale(prev => prev === 1 ? 2 : 1);
+    if (e.touches.length === 0) {
+      const now = Date.now();
+      if (now - lastTapTime.current < 300) {
+        const newScale = scale === 1 ? 2 : 1;
+        setScale(newScale);
+        if (newScale === 1) setPanOffset({ x: 0, y: 0 });
+      }
+      lastTapTime.current = now;
     }
-    lastTapTime.current = now;
   };
 
   const handlePdfLoadSuccess = ({ numPages }: { numPages: number }) => {
@@ -230,12 +252,12 @@ export default function PublicView() {
           onTouchEnd={handleTouchEnd}
         >
           <div 
-            className="relative inline-block border-2 border-border bg-muted/30 touch-pan-x touch-pan-y" 
+            className="relative inline-block border-2 border-border bg-muted/30" 
             ref={pdfContainerRef}
             style={{
-              transform: `scale(${scale})`,
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
               transformOrigin: 'top center',
-              transition: 'transform 0.2s ease-out',
+              transition: isPinching.current ? 'none' : 'transform 0.2s ease-out',
             }}
           >
               {pdfUrl && (

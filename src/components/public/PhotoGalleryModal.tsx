@@ -86,11 +86,11 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="flex-1 flex items-center justify-center bg-muted p-4 md:p-8">
+          <div className="flex-1 flex items-center justify-center bg-muted p-4 md:p-8 overflow-hidden">
             <img
               src={publicUrl}
               alt={currentPhoto.caption || 'Gallery image'}
-              className="max-w-full max-h-[60vh] object-contain"
+              className="w-full h-auto max-h-[60vh] object-contain"
             />
           </div>
           

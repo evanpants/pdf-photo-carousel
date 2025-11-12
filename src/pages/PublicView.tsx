@@ -246,7 +246,7 @@ export default function PublicView() {
       <ScrollArea className="flex-1">
         <div 
           ref={scrollContainerRef}
-          className="flex justify-center items-start p-2 md:p-6 min-h-full"
+          className="flex justify-center items-start p-2 md:p-6 min-h-full -mx-[10px] md:mx-0"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -275,13 +275,17 @@ export default function PublicView() {
                     />
                   </Document>
                   {pdfDimensions.width > 0 && (
-                    <InteractiveRegions
-                      regions={regions}
-                      pdfWidth={pdfDimensions.width}
-                      pdfHeight={pdfDimensions.height}
-                      onRegionClick={setSelectedRegion}
-                      originalPdfWidth={794}
-                    />
+                  <InteractiveRegions
+                    regions={regions}
+                    pdfWidth={pdfDimensions.width}
+                    pdfHeight={pdfDimensions.height}
+                    onRegionClick={(regionId) => {
+                      setScale(1);
+                      setPanOffset({ x: 0, y: 0 });
+                      setSelectedRegion(regionId);
+                    }}
+                    originalPdfWidth={794}
+                  />
                   )}
                 </>
               )}
@@ -292,7 +296,11 @@ export default function PublicView() {
       <PhotoGalleryModal
         photos={selectedRegion ? photosByRegion[selectedRegion] || [] : []}
         isOpen={selectedRegion !== null}
-        onClose={() => setSelectedRegion(null)}
+        onClose={() => {
+          setSelectedRegion(null);
+          setScale(1);
+          setPanOffset({ x: 0, y: 0 });
+        }}
       />
     </div>
   );

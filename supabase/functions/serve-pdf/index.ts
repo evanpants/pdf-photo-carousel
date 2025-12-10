@@ -25,6 +25,24 @@ serve(async (req) => {
       );
     }
 
+    // Security: Validate filePath to prevent path traversal attacks
+    if (
+      typeof filePath !== 'string' ||
+      filePath.includes('..') ||
+      filePath.startsWith('/') ||
+      filePath.includes('//') ||
+      !filePath.toLowerCase().endsWith('.pdf')
+    ) {
+      console.error('Invalid file path attempted:', filePath);
+      return new Response(
+        JSON.stringify({ error: 'Invalid file path' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // Create Supabase client with service role to bypass RLS
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

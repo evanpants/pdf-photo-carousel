@@ -6,8 +6,11 @@
     <script>
       // Single Page App redirect for GitHub Pages
       // Redirects all 404s to index.html for client-side routing
+      // Detect base path from current URL (for subdirectory deployments like GitHub Pages)
+      const pathSegments = window.location.pathname.split('/').filter(Boolean);
+      const basePath = pathSegments.length > 0 ? '/' + pathSegments[0] + '/' : '/';
       const path = window.location.pathname + window.location.search + window.location.hash;
-      window.location.replace('/' + '?redirect=' + encodeURIComponent(path));
+      window.location.replace(basePath + '?redirect=' + encodeURIComponent(path));
     </script>
   </head>
   <body>

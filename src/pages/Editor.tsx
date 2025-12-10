@@ -124,11 +124,23 @@ export default function Editor() {
 
     setProject(data);
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('resume-pdfs')
-      .getPublicUrl(data.pdf_path);
+    // Load PDF through edge function for secure access
+    try {
+      const response = await supabase.functions.invoke('serve-pdf', {
+        body: { filePath: data.pdf_path }
+      });
 
-    setPdfUrl(publicUrl);
+      if (response.error) {
+        throw response.error;
+      }
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      setPdfUrl(url);
+    } catch (err) {
+      console.error('Error loading PDF:', err);
+      toast.error('Failed to load PDF');
+    }
   };
 
   const loadRegions = async () => {
@@ -300,11 +312,18 @@ export default function Editor() {
       // Update local state and reload PDF
       setProject({ ...project, pdf_path: filePath });
       
-      const { data: { publicUrl } } = supabase.storage
-        .from('resume-pdfs')
-        .getPublicUrl(filePath);
-      
-      setPdfUrl(publicUrl);
+      // Load new PDF through edge function
+      const response = await supabase.functions.invoke('serve-pdf', {
+        body: { filePath }
+      });
+
+      if (response.error) {
+        throw response.error;
+      }
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      setPdfUrl(url);
       
       toast.success('PDF replaced successfully! Your regions and photos are unchanged.');
     } catch (error) {

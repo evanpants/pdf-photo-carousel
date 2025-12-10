@@ -1,1 +1,7 @@
 project_id = "aujpelvcxxxddmwaafir"
+
+[functions.serve-pdf]
+verify_jwt = false
+
+[functions.serve-photo]
+verify_jwt = false

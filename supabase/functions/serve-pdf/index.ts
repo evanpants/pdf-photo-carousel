@@ -43,16 +43,75 @@ serve(async (req) => {
       );
     }
 
-    // Create Supabase client with service role to bypass RLS
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Create service role client for file access
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log('Attempting to download PDF from path:', filePath);
+    // Get the user from the Authorization header
+    const authHeader = req.headers.get('Authorization');
+    let userId: string | null = null;
+
+    if (authHeader) {
+      // Create a client with the user's token to get their identity
+      const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user } } = await supabaseUser.auth.getUser();
+      userId = user?.id || null;
+    }
+
+    console.log('Attempting to download PDF from path:', filePath, 'for user:', userId);
+
+    // Authorization check: verify the user has access to this PDF
+    const { data: project, error: projectError } = await supabaseAdmin
+      .from('projects')
+      .select('user_id, published')
+      .eq('pdf_path', filePath)
+      .maybeSingle();
+
+    if (projectError) {
+      console.error('Error checking project authorization:', projectError);
+      return new Response(
+        JSON.stringify({ error: 'Authorization check failed' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // If project exists, check access permissions
+    if (project) {
+      const isOwner = userId && project.user_id === userId;
+      const isPublished = project.published;
+
+      if (!isOwner && !isPublished) {
+        console.warn('Unauthorized PDF access attempt:', filePath, 'by user:', userId);
+        return new Response(
+          JSON.stringify({ error: 'Access denied' }),
+          { 
+            status: 403, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    } else {
+      // PDF not associated with any project - deny access for security
+      console.warn('PDF not found in any project:', filePath);
+      return new Response(
+        JSON.stringify({ error: 'PDF not found' }),
+        { 
+          status: 404, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
 
     // Download the PDF from storage
-    const { data, error } = await supabase.storage
+    const { data, error } = await supabaseAdmin.storage
       .from('pdfs')
       .download(filePath);
 

@@ -1,22 +1,26 @@
-import { supabase } from "@/integrations/supabase/client";
-
 /**
  * Get a photo URL by serving it through the secure edge function
  * This ensures proper authorization checks are performed
  */
 export async function getSecurePhotoUrl(filePath: string): Promise<string> {
   try {
-    const { data, error } = await supabase.functions.invoke('serve-photo', {
-      body: { filePath }
-    });
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/serve-photo`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ filePath }),
+      }
+    );
 
-    if (error) {
-      console.error('Error fetching photo:', error);
-      throw error;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch photo: ${response.status}`);
     }
 
-    // The edge function returns the raw image data, so we need to create a blob URL
-    const blob = new Blob([data], { type: 'image/jpeg' });
+    const blob = await response.blob();
     return URL.createObjectURL(blob);
   } catch (error) {
     console.error('Failed to get secure photo URL:', error);
@@ -36,17 +40,7 @@ export async function getCachedPhotoUrl(filePath: string): Promise<string> {
   }
 
   try {
-    const response = await supabase.functions.invoke('serve-photo', {
-      body: { filePath }
-    });
-
-    if (response.error) {
-      throw response.error;
-    }
-
-    // Convert ArrayBuffer to Blob
-    const blob = new Blob([response.data], { type: 'image/jpeg' });
-    const url = URL.createObjectURL(blob);
+    const url = await getSecurePhotoUrl(filePath);
     photoUrlCache.set(filePath, url);
     return url;
   } catch (error) {

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, FileText, Trash2 } from 'lucide-react';
+import { Plus, FileText, Trash2, Copy, Check, ExternalLink } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -26,7 +26,19 @@ export default function ProjectsList() {
   const [title, setTitle] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const getGithubPagesUrl = (slug: string) => {
+    return `https://evanpants.github.io/pdf-photo-carousel/view/${slug}`;
+  };
+
+  const copyGithubUrl = (slug: string) => {
+    navigator.clipboard.writeText(getGithubPagesUrl(slug));
+    setCopiedSlug(slug);
+    setTimeout(() => setCopiedSlug(null), 2000);
+    toast.success('GitHub URL copied!');
+  };
 
   useEffect(() => {
     loadProjects();
@@ -185,13 +197,42 @@ export default function ProjectsList() {
                   )}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-1">
+              <CardContent className="space-y-2">
                 <p className="text-sm text-muted-foreground">
                   Created {new Date(project.created_at).toLocaleDateString()}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Last updated {new Date(project.updated_at).toLocaleDateString()}
                 </p>
+                {project.published && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <Input
+                      readOnly
+                      value={getGithubPagesUrl(project.slug)}
+                      className="text-xs h-8 flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => copyGithubUrl(project.slug)}
+                    >
+                      {copiedSlug === project.slug ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => window.open(getGithubPagesUrl(project.slug), '_blank')}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="flex gap-2">
                 <Button

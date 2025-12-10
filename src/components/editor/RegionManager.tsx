@@ -86,8 +86,18 @@ export function RegionManager({
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
+        // Validate file type (MIME type + extension)
+        const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+        if (!file.type.startsWith('image/') || !validExtensions.includes(fileExtension)) {
+          failCount++;
+          continue;
+        }
+
+        // Validate file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+          toast.error(`Image "${file.name}" exceeds 5MB limit`);
           failCount++;
           continue;
         }

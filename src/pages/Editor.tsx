@@ -48,6 +48,7 @@ export default function Editor() {
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [githubUrlCopied, setGithubUrlCopied] = useState(false);
   const [isReplacingPdf, setIsReplacingPdf] = useState(false);
   const [pdfWidth, setPdfWidth] = useState(794);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
@@ -262,6 +263,17 @@ export default function Editor() {
     toast.success('URL copied!');
   };
 
+  const getGithubPagesUrl = () => {
+    return `https://evanpants.github.io/pdf-photo-carousel/view/${project?.slug}`;
+  };
+
+  const copyGithubUrl = () => {
+    navigator.clipboard.writeText(getGithubPagesUrl());
+    setGithubUrlCopied(true);
+    setTimeout(() => setGithubUrlCopied(false), 2000);
+    toast.success('GitHub Pages URL copied!');
+  };
+
   const handleReplacePdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !project) return;
@@ -421,15 +433,29 @@ export default function Editor() {
             </div>
           </div>
           {project?.published && !hasUnsavedChanges && (
-            <div className="flex items-center gap-2">
-              <Input
-                readOnly
-                value={`${window.location.origin}/view/${project?.slug}`}
-                className="flex-1 text-xs md:text-sm"
-              />
-              <Button variant="outline" size="icon" onClick={copyPublicUrl}>
-                {urlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground shrink-0">Lovable:</span>
+                <Input
+                  readOnly
+                  value={`${window.location.origin}/view/${project?.slug}`}
+                  className="flex-1 text-xs md:text-sm"
+                />
+                <Button variant="outline" size="icon" onClick={copyPublicUrl}>
+                  {urlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground shrink-0">GitHub:</span>
+                <Input
+                  readOnly
+                  value={getGithubPagesUrl()}
+                  className="flex-1 text-xs md:text-sm"
+                />
+                <Button variant="outline" size="icon" onClick={copyGithubUrl}>
+                  {githubUrlCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
           )}
         </div>

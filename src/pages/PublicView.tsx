@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { supabase } from '@/integrations/supabase/client';
-import { Card } from '@/components/ui/card';
 import { InteractiveRegions } from '@/components/public/InteractiveRegions';
 import { PhotoGalleryModal } from '@/components/public/PhotoGalleryModal';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { usePhotoPreloader } from '@/hooks/usePhotoPreloader';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Loader2 } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -52,6 +53,9 @@ export default function PublicView() {
   const touchStartPan = useRef({ x: 0, y: 0 });
   const lastTapTime = useRef<number>(0);
   const isPinching = useRef(false);
+
+  // Preload photos in background
+  const { urls: preloadedUrls, loading: preloadingPhotos, progress: preloadProgress } = usePhotoPreloader(photosByRegion);
 
   useEffect(() => {
     loadProject();
@@ -252,6 +256,12 @@ export default function PublicView() {
         <p className="text-sm md:text-base text-muted-foreground">
           Interactive Resume {isMobile && '• Pinch or double-tap to zoom'}
         </p>
+        {preloadingPhotos && (
+          <div className="flex items-center justify-center gap-2 mt-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Loading photos ({preloadProgress}%)</span>
+          </div>
+        )}
       </div>
 
       <ScrollArea className="flex-1">
@@ -306,6 +316,7 @@ export default function PublicView() {
 
       <PhotoGalleryModal
         photos={selectedRegion ? photosByRegion[selectedRegion] || [] : []}
+        preloadedUrls={preloadedUrls}
         isOpen={selectedRegion !== null}
         onClose={() => {
           setSelectedRegion(null);

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { X, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 
 interface Photo {
   id: string;
@@ -10,67 +12,100 @@ interface Photo {
 
 interface PhotoGalleryModalProps {
   photos: Photo[];
+  preloadedUrls?: Map<string, string>;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModalProps) {
+export function PhotoGalleryModal({ photos, preloadedUrls, isOpen, onClose }: PhotoGalleryModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map());
-  const [loading, setLoading] = useState(false);
+  const [loadingPhotos, setLoadingPhotos] = useState<Set<string>>(new Set());
+  const [loadedCount, setLoadedCount] = useState(0);
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
 
   useEffect(() => {
     if (!isOpen) {
       setCurrentIndex(0);
+      setLoadedCount(0);
     }
   }, [isOpen]);
 
-  // Load photo URLs through edge function when modal opens
+  // Use preloaded URLs if available, otherwise load on demand
   useEffect(() => {
     if (!isOpen || photos.length === 0) return;
 
-    const loadPhotoUrls = async () => {
-      setLoading(true);
-      const newUrls = new Map<string, string>();
+    // Check which photos are already preloaded
+    const newUrls = new Map<string, string>();
+    const photosToLoad: Photo[] = [];
 
-      for (const photo of photos) {
-        try {
-          // Use direct fetch for proper binary handling
-          const response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/serve-photo`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              },
-              body: JSON.stringify({ filePath: photo.image_path }),
-            }
-          );
-
-          if (response.ok) {
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            newUrls.set(photo.image_path, url);
-          }
-        } catch (error) {
-          console.error('Error loading photo:', error);
-        }
+    for (const photo of photos) {
+      if (preloadedUrls?.has(photo.image_path)) {
+        newUrls.set(photo.image_path, preloadedUrls.get(photo.image_path)!);
+      } else if (!photoUrls.has(photo.image_path) && !loadingPhotos.has(photo.image_path)) {
+        photosToLoad.push(photo);
       }
+    }
 
-      setPhotoUrls(newUrls);
-      setLoading(false);
-    };
+    if (newUrls.size > 0) {
+      setPhotoUrls(prev => {
+        const merged = new Map(prev);
+        newUrls.forEach((url, path) => merged.set(path, url));
+        return merged;
+      });
+      setLoadedCount(prev => prev + newUrls.size);
+    }
 
-    loadPhotoUrls();
+    // Load remaining photos
+    if (photosToLoad.length > 0) {
+      const loadRemainingPhotos = async () => {
+        setLoadingPhotos(prev => {
+          const newSet = new Set(prev);
+          photosToLoad.forEach(p => newSet.add(p.image_path));
+          return newSet;
+        });
 
-    // Cleanup blob URLs on unmount
-    return () => {
-      photoUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [isOpen, photos]);
+        for (const photo of photosToLoad) {
+          try {
+            const response = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/serve-photo`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                },
+                body: JSON.stringify({ filePath: photo.image_path }),
+              }
+            );
+
+            if (response.ok) {
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              setPhotoUrls(prev => {
+                const newMap = new Map(prev);
+                newMap.set(photo.image_path, url);
+                return newMap;
+              });
+              setLoadedCount(prev => prev + 1);
+            }
+          } catch (error) {
+            console.error('Error loading photo:', error);
+            setLoadedCount(prev => prev + 1);
+          } finally {
+            setLoadingPhotos(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(photo.image_path);
+              return newSet;
+            });
+          }
+        }
+      };
+
+      loadRemainingPhotos();
+    }
+  }, [isOpen, photos, preloadedUrls]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,11 +134,9 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
 
   const handleTouchEnd = () => {
     if (touchStartX.current - touchEndX.current > 75) {
-      // Swipe left - next photo
       setCurrentIndex((prev) => (prev + 1) % photos.length);
     }
     if (touchEndX.current - touchStartX.current > 75) {
-      // Swipe right - previous photo
       setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length);
     }
   };
@@ -111,7 +144,10 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
   if (photos.length === 0) return null;
 
   const currentPhoto = photos[currentIndex];
-  const currentPhotoUrl = photoUrls.get(currentPhoto.image_path) || '/placeholder.svg';
+  const currentPhotoUrl = photoUrls.get(currentPhoto.image_path);
+  const isCurrentPhotoLoading = !currentPhotoUrl;
+  const loadProgress = photos.length > 0 ? Math.round((loadedCount / photos.length) * 100) : 0;
+  const allPhotosLoaded = loadedCount >= photos.length;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -130,14 +166,31 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
+          {/* Loading progress bar */}
+          {!allPhotosLoaded && (
+            <div className="px-4 pt-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Loading photos... {loadProgress}%</span>
+              </div>
+              <Progress value={loadProgress} className="h-1" />
+            </div>
+          )}
+
           <div className="flex-1 flex items-center justify-center bg-muted p-4 md:p-8 overflow-hidden min-h-[300px]">
-            {loading ? (
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            {isCurrentPhotoLoading ? (
+              <div className="flex flex-col items-center gap-4 w-full max-w-md">
+                <Skeleton className="w-full aspect-video rounded-lg" />
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading image...</span>
+                </div>
+              </div>
             ) : (
               <img
                 src={currentPhotoUrl}
                 alt={currentPhoto.caption || 'Gallery image'}
-                className="w-full h-auto max-h-[60vh] object-contain"
+                className="w-full h-auto max-h-[60vh] object-contain animate-fade-in"
               />
             )}
           </div>
@@ -151,7 +204,8 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
           {photos.length > 1 && (
             <div className="flex gap-2 p-4 bg-background overflow-x-auto justify-center">
               {photos.map((photo, idx) => {
-                const thumbUrl = photoUrls.get(photo.image_path) || '/placeholder.svg';
+                const thumbUrl = photoUrls.get(photo.image_path);
+                const isThumbLoading = !thumbUrl;
                 
                 return (
                   <button
@@ -161,11 +215,15 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
                       idx === currentIndex ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <img
-                      src={thumbUrl}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
+                    {isThumbLoading ? (
+                      <Skeleton className="w-full h-full" />
+                    ) : (
+                      <img
+                        src={thumbUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    )}
                   </button>
                 );
               })}

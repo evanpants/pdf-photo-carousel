@@ -15,6 +15,7 @@ interface Project {
   slug: string;
   published: boolean;
   created_at: string;
+  updated_at: string;
   pdf_path: string;
 }
 
@@ -184,9 +185,12 @@ export default function ProjectsList() {
                   )}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-1">
                 <p className="text-sm text-muted-foreground">
                   Created {new Date(project.created_at).toLocaleDateString()}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Last updated {new Date(project.updated_at).toLocaleDateString()}
                 </p>
               </CardContent>
               <CardFooter className="flex gap-2">

@@ -112,7 +112,7 @@ serve(async (req) => {
 
     // Download the PDF from storage
     const { data, error } = await supabaseAdmin.storage
-      .from('pdfs')
+      .from('resume-pdfs')
       .download(filePath);
 
     if (error) {

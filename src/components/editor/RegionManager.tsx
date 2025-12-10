@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Upload, X, Image as ImageIcon, GripVertical, MoveUp, MoveDown } from 'lucide-react';
+import { Upload, Image as ImageIcon } from 'lucide-react';
+import { PhotoList } from './PhotoList';
 
 interface Region {
   id: string;
@@ -297,70 +298,12 @@ export function RegionManager({
               </div>
             </div>
 
-            <div className="space-y-3">
-              <Label>Photos ({photos.length})</Label>
-              {photos.map((photo, index) => {
-                const { data: { publicUrl } } = supabase.storage
-                  .from('carousel-photos')
-                  .getPublicUrl(photo.image_path);
-
-                return (
-                  <div key={photo.id} className="border rounded-lg p-3 space-y-2">
-                    <div className="flex gap-2">
-                      <div className="flex flex-col gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={index === 0}
-                          onClick={() => handleReorderPhoto(photo.id, 'up')}
-                        >
-                          <MoveUp className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={index === photos.length - 1}
-                          onClick={() => handleReorderPhoto(photo.id, 'down')}
-                        >
-                          <MoveDown className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <div className="flex-1 space-y-2">
-                        <div className="relative aspect-video rounded overflow-hidden bg-muted">
-                          <img
-                            src={publicUrl}
-                            alt="Carousel"
-                            className="w-full h-full object-cover"
-                          />
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="absolute top-2 right-2"
-                            onClick={() => handleDeletePhoto(photo.id, photo.image_path)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <Input
-                          placeholder="Add caption..."
-                          defaultValue={photo.caption || ''}
-                          onBlur={(e) => handleUpdateCaption(photo.id, e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {photos.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <ImageIcon className="h-12 w-12 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">No photos yet</p>
-                  <p className="text-xs text-muted-foreground">Upload images for this region</p>
-                </div>
-              )}
-            </div>
+            <PhotoList
+              photos={photos}
+              onReorder={handleReorderPhoto}
+              onDelete={handleDeletePhoto}
+              onUpdateCaption={handleUpdateCaption}
+            />
           </>
         )}
       </CardContent>

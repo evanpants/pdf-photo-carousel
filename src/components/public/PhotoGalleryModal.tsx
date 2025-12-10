@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Photo {
@@ -17,6 +17,8 @@ interface PhotoGalleryModalProps {
 
 export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map());
+  const [loading, setLoading] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
 
@@ -25,6 +27,42 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
       setCurrentIndex(0);
     }
   }, [isOpen]);
+
+  // Load photo URLs through edge function when modal opens
+  useEffect(() => {
+    if (!isOpen || photos.length === 0) return;
+
+    const loadPhotoUrls = async () => {
+      setLoading(true);
+      const newUrls = new Map<string, string>();
+
+      for (const photo of photos) {
+        try {
+          const response = await supabase.functions.invoke('serve-photo', {
+            body: { filePath: photo.image_path }
+          });
+
+          if (!response.error && response.data) {
+            const blob = new Blob([response.data], { type: 'image/jpeg' });
+            const url = URL.createObjectURL(blob);
+            newUrls.set(photo.image_path, url);
+          }
+        } catch (error) {
+          console.error('Error loading photo:', error);
+        }
+      }
+
+      setPhotoUrls(newUrls);
+      setLoading(false);
+    };
+
+    loadPhotoUrls();
+
+    // Cleanup blob URLs on unmount
+    return () => {
+      photoUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [isOpen, photos]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -65,9 +103,7 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
   if (photos.length === 0) return null;
 
   const currentPhoto = photos[currentIndex];
-  const { data: { publicUrl } } = supabase.storage
-    .from('carousel-photos')
-    .getPublicUrl(currentPhoto.image_path);
+  const currentPhotoUrl = photoUrls.get(currentPhoto.image_path) || '/placeholder.svg';
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -86,12 +122,16 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="flex-1 flex items-center justify-center bg-muted p-4 md:p-8 overflow-hidden">
-            <img
-              src={publicUrl}
-              alt={currentPhoto.caption || 'Gallery image'}
-              className="w-full h-auto max-h-[60vh] object-contain"
-            />
+          <div className="flex-1 flex items-center justify-center bg-muted p-4 md:p-8 overflow-hidden min-h-[300px]">
+            {loading ? (
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            ) : (
+              <img
+                src={currentPhotoUrl}
+                alt={currentPhoto.caption || 'Gallery image'}
+                className="w-full h-auto max-h-[60vh] object-contain"
+              />
+            )}
           </div>
           
           {currentPhoto.caption && (
@@ -103,9 +143,7 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
           {photos.length > 1 && (
             <div className="flex gap-2 p-4 bg-background overflow-x-auto justify-center">
               {photos.map((photo, idx) => {
-                const { data: { publicUrl: thumbUrl } } = supabase.storage
-                  .from('carousel-photos')
-                  .getPublicUrl(photo.image_path);
+                const thumbUrl = photoUrls.get(photo.image_path) || '/placeholder.svg';
                 
                 return (
                   <button

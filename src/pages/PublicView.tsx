@@ -180,11 +180,22 @@ export default function PublicView() {
 
       setProject(projectData);
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('resume-pdfs')
-      .getPublicUrl(projectData.pdf_path);
+      // Load PDF through edge function for secure access
+      try {
+        const response = await supabase.functions.invoke('serve-pdf', {
+          body: { filePath: projectData.pdf_path }
+        });
 
-    setPdfUrl(publicUrl);
+        if (response.error) {
+          throw response.error;
+        }
+
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        setPdfUrl(url);
+      } catch (err) {
+        console.error('Error loading PDF:', err);
+      }
 
     // Load regions
     const { data: regionsData } = await supabase

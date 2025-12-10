@@ -254,8 +254,18 @@ export default function Editor() {
     const file = e.target.files?.[0];
     if (!file || !project) return;
 
-    if (!file.type.includes('pdf')) {
-      toast.error('Please upload a PDF file');
+    // Validate file type (MIME type + extension)
+    const validExtensions = ['.pdf'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    if (!file.type.includes('pdf') || !validExtensions.includes(fileExtension)) {
+      toast.error('Please upload a valid PDF file');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast.error('PDF file must be less than 10MB');
       return;
     }
 

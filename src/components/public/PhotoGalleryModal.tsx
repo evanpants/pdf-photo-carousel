@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { X, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 
 interface Photo {
   id: string;
@@ -38,12 +37,21 @@ export function PhotoGalleryModal({ photos, isOpen, onClose }: PhotoGalleryModal
 
       for (const photo of photos) {
         try {
-          const response = await supabase.functions.invoke('serve-photo', {
-            body: { filePath: photo.image_path }
-          });
+          // Use direct fetch for proper binary handling
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/serve-photo`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              },
+              body: JSON.stringify({ filePath: photo.image_path }),
+            }
+          );
 
-          if (!response.error && response.data) {
-            const blob = new Blob([response.data], { type: 'image/jpeg' });
+          if (response.ok) {
+            const blob = await response.blob();
             const url = URL.createObjectURL(blob);
             newUrls.set(photo.image_path, url);
           }
